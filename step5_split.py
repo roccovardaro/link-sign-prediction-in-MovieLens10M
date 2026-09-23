@@ -21,6 +21,11 @@ from config import (
     TRAIN_FILE,
     VAL_FILE,
     TEST_FILE,
+    TRAIN_CSV,
+    VAL_CSV,
+    TEST_CSV,
+    EVENTS_CSV,
+    BINARY_LABEL_MAP,
     DATA_PROCESSED,
     CSV_PROCESSED,
     RESULTS_DIR,
@@ -58,8 +63,6 @@ def temporal_split(df, ratios=SPLIT_RATIOS):
     # Calcola i confini (indici)
     n_train = int(n * ratios["train"])
     n_val = int(n * ratios["val"])
-    # Il test prende tutto il resto per evitare perdite da arrotondamento
-    # n_test = n - n_train - n_val
 
     splits = {
         "train": df.iloc[:n_train].copy(),
@@ -113,13 +116,17 @@ def save_splits(splits, split_info):
     CSV_PROCESSED.mkdir(parents=True, exist_ok=True)
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
-    file_map = {"train": TRAIN_FILE, "val": VAL_FILE, "test": TEST_FILE}
+    file_map = {
+        "train": (TRAIN_FILE, TRAIN_CSV),
+        "val":   (VAL_FILE, VAL_CSV),
+        "test":  (TEST_FILE, TEST_CSV),
+    }
 
     for name, split_df in splits.items():
-        path = file_map[name]
-        split_df.to_parquet(path, index=False)
-        split_df.to_csv(CSV_PROCESSED / f"{name}.csv", index=False)
-        print(f"  {name:>5s} salvato: {path}  ({len(split_df):,} righe)")
+        parquet_path, csv_path = file_map[name]
+        split_df.to_parquet(parquet_path, index=False)
+        split_df.to_csv(csv_path, index=False)
+        print(f"  {name:>5s} salvato: {csv_path}  ({len(split_df):,} righe)")
 
     # Salva info per riproducibilità
     with open(SPLIT_INFO_FILE, "w", encoding="utf-8") as f:
@@ -148,23 +155,22 @@ def print_split_summary(split_info):
 
 # ── Entry point ──────────────────────────────────────────────────────────
 
-def run(binary_df):
+def run(events_path=EVENTS_CSV):
     """
     Esegue lo step 5: split temporale del subset binario.
-
-    Parameters
-    ----------
-    binary_df : pd.DataFrame
-        Subset binario (senza recensioni neutrali) dallo step 3.
-
-    Returns
-    -------
-    dict[str, pd.DataFrame]
-        Dizionario con i tre split.
+    Carica le interazioni direttamente da events_path (events.csv).
     """
     print("=" * 60)
     print("STEP 5 – Separazione train / validation / test")
     print("=" * 60)
+
+    print(f"  Caricamento eventi da: {events_path}")
+    df = pd.read_csv(events_path, parse_dates=["timestamp"])
+
+    binary_df = df[df["label"] != "neutrale"].copy()
+    if "binary_label" not in binary_df.columns:
+        binary_df["binary_label"] = binary_df["label"].map(BINARY_LABEL_MAP)
+    print(f"  Subset binario estratto da events: {len(binary_df):,} righe")
 
     splits, split_info = temporal_split(binary_df)
     verify_no_leakage(splits)
@@ -176,11 +182,4 @@ def run(binary_df):
 
 
 if __name__ == "__main__":
-    from step1_acquisizione import run as step1_run
-    from step2_pulizia import run as step2_run
-    from step3_grafo import run as step3_run
-
-    df = step1_run()
-    df, stats = step2_run(df)
-    df, events, edges, binary_df = step3_run(df)
-    splits = run(binary_df)
+    splits = run()

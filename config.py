@@ -40,14 +40,26 @@ SPLIT_RATIOS = {
     "test":  0.15,
 }
 
-# ── Nomi file di output ─────────────────────────────────────────────────
+# ── File CSV utili (uno per ogni fase, nessuna ridondanza) ───────────────
+RAW_REVIEWS_CSV   = CSV_PROCESSED / "raw_reviews.csv"
+CLEAN_REVIEWS_CSV = CSV_PROCESSED / "clean_reviews.csv"
+EVENTS_CSV        = CSV_PROCESSED / "events.csv"
+TRAIN_CSV         = CSV_PROCESSED / "train.csv"
+VAL_CSV           = CSV_PROCESSED / "val.csv"
+TEST_CSV          = CSV_PROCESSED / "test.csv"
+
+# ── File Parquet ────────────────────────────────────────────────────────
 EVENTS_TABLE_FILE = DATA_PROCESSED / "events.parquet"
-GRAPH_EDGES_FILE = DATA_PROCESSED / "graph_edges.parquet"
-CLEAN_REVIEWS_FILE = DATA_PROCESSED / "reviews_clean.parquet"
-STATS_FILE = RESULTS_DIR / "exploration_stats.json"
+TRAIN_FILE        = DATA_PROCESSED / "train.parquet"
+VAL_FILE          = DATA_PROCESSED / "val.parquet"
+TEST_FILE         = DATA_PROCESSED / "test.parquet"
+
+# ── File risultati e statistiche ────────────────────────────────────────
+STATS_FILE      = RESULTS_DIR / "exploration_stats.json"
 SPLIT_INFO_FILE = RESULTS_DIR / "split_info.json"
 
-# File per ogni split
-TRAIN_FILE = DATA_PROCESSED / "train.parquet"
-VAL_FILE   = DATA_PROCESSED / "val.parquet"
-TEST_FILE  = DATA_PROCESSED / "test.parquet"
+# ── TF-IDF (Step 9) ─────────────────────────────────────────────────────
+TFIDF_MAX_FEATURES = 20_000
+TFIDF_MIN_DF = 2
+TFIDF_SUBLINEAR_TF = True
+VECTORIZER_FILE = DATA_PROCESSED / "tfidf_vectorizer.joblib"

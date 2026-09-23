@@ -7,7 +7,7 @@ unisce titolo e testo in un unico campo testuale.
 
 import pandas as pd
 
-from config import RAW_FILE, KEEP_COLUMNS
+from config import RAW_FILE, KEEP_COLUMNS, RAW_REVIEWS_CSV
 
 
 def load_reviews(path=RAW_FILE, columns=KEEP_COLUMNS):
@@ -30,6 +30,7 @@ def load_reviews(path=RAW_FILE, columns=KEEP_COLUMNS):
         raise FileNotFoundError(f"File non trovato: {path.resolve()}")
 
     df = pd.read_json(path, lines=True)
+    df = df.drop(df.sample(frac=90 / 100, random_state=42).index) #TODO percentuale righe x
     missing = [c for c in columns if c not in df.columns]
     if missing:
         raise KeyError(f"Colonne mancanti nel file: {missing}")
@@ -66,8 +67,8 @@ def merge_title_text(df):
     return df
 
 
-def run(path=RAW_FILE):
-    """Esegue lo step 1 completo e restituisce il DataFrame."""
+def run(path=RAW_FILE, output_csv=RAW_REVIEWS_CSV):
+    """Esegue lo step 1 completo e salva il DataFrame in CSV."""
     print("=" * 60)
     print("STEP 1 – Acquisizione dei dati")
     print("=" * 60)
@@ -79,6 +80,10 @@ def run(path=RAW_FILE):
     df = merge_title_text(df)
     print(f"  Campo 'review_text' creato (title + text uniti)")
     print(f"  Colonne finali: {list(df.columns)}")
+
+    output_csv.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(output_csv, index=False)
+    print(f"  Dati grezzi salvati in CSV: {output_csv}")
     print()
 
     return df

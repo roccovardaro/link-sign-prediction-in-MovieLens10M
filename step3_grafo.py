@@ -13,9 +13,10 @@ from config import (
     LABEL_MAP,
     BINARY_LABEL_MAP,
     DATA_PROCESSED,
+    CSV_PROCESSED,
+    CLEAN_REVIEWS_CSV,
+    EVENTS_CSV,
     EVENTS_TABLE_FILE,
-    GRAPH_EDGES_FILE,
-    CLEAN_REVIEWS_FILE, CSV_PROCESSED,
 )
 
 
@@ -50,8 +51,7 @@ def build_events_table(df):
 
 def build_graph_edges(df):
     """
-    Costruisce la lista di archi del grafo bipartito.
-    Ogni arco collega un nodo utente a un nodo prodotto.
+    Costruisce la vista degli archi del grafo bipartito (src, dst, rating, label).
     Include tutte le recensioni (anche neutrali).
     """
     edges = df[["user_id", "parent_asin", "rating", "label"]].copy()
@@ -86,30 +86,26 @@ def build_binary_subset(df, binary_map=BINARY_LABEL_MAP):
     return binary_df
 
 
-def save_outputs(events:pd.DataFrame, edges:pd.DataFrame, clean_df:pd.DataFrame):
-    """Salva tutti gli output su disco in formato Parquet."""
+def save_outputs(events: pd.DataFrame):
+    """Salva la sola tabella degli eventi su disco in CSV e Parquet."""
     DATA_PROCESSED.mkdir(parents=True, exist_ok=True)
     CSV_PROCESSED.mkdir(parents=True, exist_ok=True)
 
-    events.to_csv(CSV_PROCESSED / "events.csv")
-    edges.to_csv(CSV_PROCESSED / "edges.csv")
-    clean_df.to_csv(CSV_PROCESSED / "clean_reviews.csv")
+    events.to_csv(EVENTS_CSV, index=False)
+    print(f"  Tabella eventi CSV salvata:     {EVENTS_CSV}")
 
     events.to_parquet(EVENTS_TABLE_FILE, index=False)
-    print(f"  Tabella eventi salvata:  {EVENTS_TABLE_FILE}")
-
-    edges.to_parquet(GRAPH_EDGES_FILE, index=False)
-    print(f"  Archi del grafo salvati: {GRAPH_EDGES_FILE}")
-
-    clean_df.to_parquet(CLEAN_REVIEWS_FILE, index=False)
-    print(f"  Recensioni pulite:       {CLEAN_REVIEWS_FILE}")
+    print(f"  Tabella eventi Parquet salvata: {EVENTS_TABLE_FILE}")
 
 
-def run(df):
-    """Esegue lo step 3 completo."""
+def run(input_path=CLEAN_REVIEWS_CSV):
+    """Esegue lo step 3 completo: etichette e grafo, salvando events.csv."""
     print("=" * 60)
     print("STEP 3 – Definizione del grafo e delle etichette")
     print("=" * 60)
+
+    print(f"  Caricamento recensioni pulite da: {input_path}")
+    df = pd.read_csv(input_path, parse_dates=["timestamp"])
 
     df = assign_labels(df)
 
@@ -117,16 +113,11 @@ def run(df):
     edges = build_graph_edges(df)
     binary_df = build_binary_subset(df)
 
-    save_outputs(events, edges, df)
+    save_outputs(events)
 
     print()
     return df, events, edges, binary_df
 
 
 if __name__ == "__main__":
-    from step1_acquisizione import run as step1_run
-    from step2_pulizia import run as step2_run
-
-    df = step1_run()
-    df, stats = step2_run(df)
-    df, events, edges, binary_df = run(df)
+    df, events, edges, binary_df = run()

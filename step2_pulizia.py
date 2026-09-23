@@ -17,7 +17,7 @@ import re
 
 import pandas as pd
 
-from config import RESULTS_DIR, STATS_FILE
+from config import RESULTS_DIR, STATS_FILE, RAW_REVIEWS_CSV, CLEAN_REVIEWS_CSV
 
 
 # ── Pulizia ──────────────────────────────────────────────────────────────
@@ -169,11 +169,14 @@ def print_stats(stats):
 
 # ── Entry point ──────────────────────────────────────────────────────────
 
-def run(df):
+def run(input_path=RAW_REVIEWS_CSV, output_path=CLEAN_REVIEWS_CSV):
     """Esegue lo step 2 completo: pulizia + esplorazione."""
     print("=" * 60)
     print("STEP 2 – Pulizia ed esplorazione")
     print("=" * 60)
+
+    print(f"  Caricamento dati da: {input_path}")
+    df = pd.read_csv(input_path)
 
     df = validate_types(df)
     df = handle_missing(df)
@@ -186,12 +189,13 @@ def run(df):
     print_stats(stats)
     save_stats(stats)
 
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(output_path, index=False)
+    print(f"  Recensioni pulite salvate in: {output_path}\n")
+
     return df, stats
 
 
 if __name__ == "__main__":
-    from step1_acquisizione import run as step1_run
-
-    df = step1_run()
-    df, stats = run(df)
+    df, stats = run()
     print(df.head())

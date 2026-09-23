@@ -31,7 +31,17 @@ import pandas as pd
 import networkx as nx
 from networkx.algorithms import bipartite
 
-from config import DATA_PROCESSED, CSV_PROCESSED
+from config import (
+    DATA_PROCESSED,
+    CSV_PROCESSED,
+    EVENTS_CSV,
+    TRAIN_CSV,
+    VAL_CSV,
+    TEST_CSV,
+    TRAIN_FILE,
+    VAL_FILE,
+    TEST_FILE,
+)
 
 # ── Nomi delle feature generate ──────────────────────────────────────────
 STRUCTURAL_FEATURES = [
@@ -258,6 +268,11 @@ def extract_features_for_split(split_df, events_df):
                   f"(grafo: {G.number_of_nodes():,} nodi, "
                   f"{G.number_of_edges():,} archi)")
 
+    # Rimuove vecchie feature strutturali se già presenti (riesecuzione idempotente)
+    cols_to_drop = [c for c in STRUCTURAL_FEATURES if c in split_df.columns]
+    if cols_to_drop:
+        split_df = split_df.drop(columns=cols_to_drop)
+
     features_df = pd.DataFrame(records, index=split_df.index)
     result = pd.concat([split_df, features_df], axis=1)
     return result
@@ -284,41 +299,43 @@ def print_feature_summary(df, split_name):
 
 
 def save_enriched_splits(splits):
-    """Salva i split arricchiti con le feature strutturali."""
+    """Salva i split arricchiti direttamente nei 3 file CSV/Parquet utili."""
     DATA_PROCESSED.mkdir(parents=True, exist_ok=True)
     CSV_PROCESSED.mkdir(parents=True, exist_ok=True)
 
-    for name, split_df in splits.items():
-        parquet_path = DATA_PROCESSED / f"{name}_features.parquet"
-        csv_path = CSV_PROCESSED / f"{name}_features.csv"
+    file_map = {
+        "train": (TRAIN_FILE, TRAIN_CSV),
+        "val":   (VAL_FILE, VAL_CSV),
+        "test":  (TEST_FILE, TEST_CSV),
+    }
 
+    for name, split_df in splits.items():
+        parquet_path, csv_path = file_map[name]
         split_df.to_parquet(parquet_path, index=False)
         split_df.to_csv(csv_path, index=False)
-        print(f"  {name:>5s} con feature salvato: {parquet_path}")
+        print(f"  {name:>5s} con feature strutturali salvato: {csv_path}")
 
 
 # ── Entry point ──────────────────────────────────────────────────────────
 
-def run(splits, events_df):
+def run(train_path=TRAIN_CSV, val_path=VAL_CSV, test_path=TEST_CSV, events_path=EVENTS_CSV):
     """
     Esegue lo step 6: estrazione feature strutturali per ogni split
     tramite grafo bipartito NetworkX.
-
-    Parameters
-    ----------
-    splits : dict[str, pd.DataFrame]
-        Dizionario {'train': df, 'val': df, 'test': df} dallo step 5.
-    events_df : pd.DataFrame
-        Tabella eventi completa (incluse neutrali) dallo step 3.
-
-    Returns
-    -------
-    dict[str, pd.DataFrame]
-        Split arricchiti con le colonne di feature strutturali.
     """
     print("=" * 60)
     print("STEP 6 – Estrazione caratteristiche strutturali (NetworkX)")
     print("=" * 60)
+
+    print(f"  Caricamento split da: {train_path}, {val_path}, {test_path}")
+    splits = {
+        "train": pd.read_csv(train_path, parse_dates=["timestamp"]),
+        "val":   pd.read_csv(val_path, parse_dates=["timestamp"]),
+        "test":  pd.read_csv(test_path, parse_dates=["timestamp"]),
+    }
+
+    print(f"  Caricamento eventi da: {events_path}")
+    events_df = pd.read_csv(events_path, parse_dates=["timestamp"])
 
     enriched = {}
     for name in ["train", "val", "test"]:
@@ -333,13 +350,4 @@ def run(splits, events_df):
 
 
 if __name__ == "__main__":
-    from step1_acquisizione import run as step1_run
-    from step2_pulizia import run as step2_run
-    from step3_grafo import run as step3_run
-    from step5_split import run as step5_run
-
-    df = step1_run()
-    df, stats = step2_run(df)
-    df, events, edges, binary_df = step3_run(df)
-    splits = step5_run(binary_df)
-    enriched = run(splits, events)
+    enriched = run()
