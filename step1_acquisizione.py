@@ -30,7 +30,7 @@ def load_reviews(path=RAW_FILE, columns=KEEP_COLUMNS):
         raise FileNotFoundError(f"File non trovato: {path.resolve()}")
 
     df = pd.read_json(path, lines=True)
-    df = df.drop(df.sample(frac=90 / 100, random_state=42).index) #TODO percentuale righe x
+    #df = df.drop(df.sample(frac=80 / 100, random_state=42).index) #TODO percentuale righe x
     missing = [c for c in columns if c not in df.columns]
     if missing:
         raise KeyError(f"Colonne mancanti nel file: {missing}")

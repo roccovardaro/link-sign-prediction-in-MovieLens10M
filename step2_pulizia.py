@@ -1,11 +1,12 @@
 """
+
 Step 2 – Pulizia ed esplorazione.
 
 Operazioni:
   - Validazione tipi (identificativi, rating, timestamp)
   - Gestione valori mancanti
-  - Rimozione duplicati effettivi
-  - Gestione recensioni ripetute della stessa coppia (user, product)
+  - Rimozione duplicati esatti
+  - Mantenimento delle recensioni ripetute della stessa coppia (user, product)
   - Pulizia HTML e spazi superflui dal testo
   - Ordinamento cronologico
   - Flag per recensioni senza testo
@@ -14,7 +15,6 @@ Operazioni:
 
 import json
 import re
-
 import pandas as pd
 
 from config import RESULTS_DIR, STATS_FILE, RAW_REVIEWS_CSV, CLEAN_REVIEWS_CSV
@@ -60,20 +60,6 @@ def remove_exact_duplicates(df):
     return df
 
 
-def handle_repeated_reviews(df):
-    """
-    Se la stessa coppia (user_id, parent_asin) ha più recensioni,
-    mantiene solo l'ultima in ordine cronologico.
-    """
-    before = len(df)
-    df = (
-        df.sort_values("timestamp")
-        .drop_duplicates(subset=["user_id", "parent_asin"], keep="last")
-        .copy()
-    )
-    after = len(df)
-    print(f"  Recensioni ripetute (stessa coppia) rimosse: {before - after:,}")
-    return df
 
 
 def clean_html_and_whitespace(text):
@@ -181,7 +167,6 @@ def run(input_path=RAW_REVIEWS_CSV, output_path=CLEAN_REVIEWS_CSV):
     df = validate_types(df)
     df = handle_missing(df)
     df = remove_exact_duplicates(df)
-    df = handle_repeated_reviews(df)
     df = clean_text_column(df)
     df = sort_chronologically(df)
 
