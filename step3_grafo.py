@@ -1,93 +1,97 @@
 """
-Step 3 – Definizione del grafo bipartito e delle etichette.
+Step 3 – Definizione del grafo bipartito e delle etichette (MovieLens 10M).
 
 Costruisce:
-  1. Tabella degli eventi (tutte le interazioni con data, testo, rating)
-  2. Grafo bipartito utente-prodotto con etichette di sentiment
-  3. Subset binario per addestramento (esclude neutrale)
+  1. Tabella degli eventi (tutte le interazioni utente-film con voto, data, titolo, generi)
+  2. Grafo bipartito utente-film con etichette di gradimento
+  3. Subset binario per addestramento (esclude neutrale: negativa=0, positiva=1)
 """
 
+from pathlib import Path
 import pandas as pd
 
 from config import (
-    LABEL_MAP,
+    rating_to_sentiment,
     BINARY_LABEL_MAP,
     DATA_PROCESSED,
     CSV_PROCESSED,
-    CLEAN_REVIEWS_CSV,
+    CLEAN_RATINGS_CSV,
     EVENTS_CSV,
     EVENTS_TABLE_FILE,
 )
 
 
-def assign_labels(df, label_map=LABEL_MAP):
+def assign_labels(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Assegna l'etichetta di sentiment in base al rating.
-
-    Mapping:
-      1-2 stelle → negativa
-      3 stelle   → neutrale
-      4-5 stelle → positiva
+    Assegna l'etichetta di sentiment in base al rating:
+      <= 2.5 stelle → negativa
+      3.0 - 3.5     → neutrale
+      >= 4.0 stelle → positiva
     """
-    df["label"] = df["rating"].map(label_map)
+    df["label"] = df["rating"].apply(rating_to_sentiment)
     counts = df["label"].value_counts()
     print("  Distribuzione etichette:")
     for lbl in ["negativa", "neutrale", "positiva"]:
-        print(f"    {lbl}: {counts.get(lbl, 0):,}")
+        print(f"    {lbl:<10s}: {counts.get(lbl, 0):,}")
     return df
 
 
-def build_events_table(df):
+def build_events_table(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Conserva la tabella degli eventi con tutte le informazioni:
-    date, testo, rating, e eventuali recensioni ripetute
-    (già gestite nello step 2, qui si salva il risultato).
+    Conserva la tabella degli eventi con tutte le informazioni ordinate per timestamp.
     """
-    events = df[["user_id", "parent_asin", "rating", "label",
-                  "review_text", "has_text", "timestamp"]].copy()
+    cols = ["user_id", "movie_id", "rating", "label", "timestamp"]
+    if "title" in df.columns:
+        cols.append("title")
+    if "genres" in df.columns:
+        cols.append("genres")
+
+    events = df[cols].copy()
     events = events.sort_values("timestamp").reset_index(drop=True)
     return events
 
 
-def build_graph_edges(df):
+def build_graph_edges(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Costruisce la vista degli archi del grafo bipartito (src, dst, rating, label).
-    Include tutte le recensioni (anche neutrali).
+    Costruisce la vista degli archi del grafo bipartito (src=user_id, dst=movie_id).
     """
-    edges = df[["user_id", "parent_asin", "rating", "label"]].copy()
-    edges = edges.rename(columns={"user_id": "src", "parent_asin": "dst"})
+    edges = df[["user_id", "movie_id", "rating", "label"]].copy()
+    edges = edges.rename(columns={"user_id": "src", "movie_id": "dst"})
 
     n_users = edges["src"].nunique()
-    n_products = edges["dst"].nunique()
+    n_movies = edges["dst"].nunique()
     n_edges = len(edges)
 
-    print(f"\n  ── Grafo Bipartito ──")
-    print(f"  Nodi utente:   {n_users:,}")
-    print(f"  Nodi prodotto: {n_products:,}")
-    print(f"  Archi totali:  {n_edges:,}")
+    print(f"\n  ── Grafo Bipartito Utente-Film ──")
+    print(f"  Nodi utente: {n_users:,}")
+    print(f"  Nodi film:   {n_movies:,}")
+    print(f"  Archi totali:{n_edges:,}")
 
     return edges
 
 
-def build_binary_subset(df, binary_map=BINARY_LABEL_MAP):
+def build_binary_subset(df: pd.DataFrame, binary_map: dict = BINARY_LABEL_MAP) -> pd.DataFrame:
     """
-    Crea il subset per il classificatore binario del segno:
-      - Esclude le recensioni neutrali
+    Crea il subset per il classificatore binario:
+      - Esclude valutazioni neutrali
       - Assegna etichetta binaria (0 = negativa, 1 = positiva)
     """
     binary_df = df[df["label"] != "neutrale"].copy()
-    binary_df["binary_label"] = binary_df["label"].map(binary_map)
+    binary_df["binary_label"] = binary_df["label"].map(binary_map).astype(int)
+
+    n_neg = (binary_df["binary_label"] == 0).sum()
+    n_pos = (binary_df["binary_label"] == 1).sum()
 
     print(f"\n  ── Subset Binario (no neutrale) ──")
-    print(f"  Totale: {len(binary_df):,}")
-    print(f"  Negativi (0): {(binary_df['binary_label'] == 0).sum():,}")
-    print(f"  Positivi (1): {(binary_df['binary_label'] == 1).sum():,}")
+    print(f"  Totale istanze: {len(binary_df):,}")
+    print(f"  Negativi (0):   {n_neg:,} ({n_neg / len(binary_df) * 100:.1f}%)")
+    print(f"  Positivi (1):   {n_pos:,} ({n_pos / len(binary_df) * 100:.1f}%)")
 
     return binary_df
 
 
-def save_outputs(events: pd.DataFrame):
-    """Salva la sola tabella degli eventi su disco in CSV e Parquet."""
+def save_outputs(events: pd.DataFrame) -> None:
+    """Salva la tabella degli eventi in CSV e Parquet."""
     DATA_PROCESSED.mkdir(parents=True, exist_ok=True)
     CSV_PROCESSED.mkdir(parents=True, exist_ok=True)
 
@@ -98,23 +102,21 @@ def save_outputs(events: pd.DataFrame):
     print(f"  Tabella eventi Parquet salvata: {EVENTS_TABLE_FILE}")
 
 
-def run(input_path=CLEAN_REVIEWS_CSV):
-    """Esegue lo step 3 completo: etichette e grafo, salvando events.csv."""
+def run(input_path: Path = CLEAN_RATINGS_CSV):
+    """Esegue lo Step 3 completo: etichette e grafo, salvando events.csv."""
     print("=" * 60)
-    print("STEP 3 – Definizione del grafo e delle etichette")
+    print("STEP 3 – Definizione del grafo bipartito e delle etichette")
     print("=" * 60)
 
-    print(f"  Caricamento recensioni pulite da: {input_path}")
+    print(f"  Caricamento valutazioni pulite da: {input_path}")
     df = pd.read_csv(input_path, parse_dates=["timestamp"])
 
     df = assign_labels(df)
-
     events = build_events_table(df)
     edges = build_graph_edges(df)
     binary_df = build_binary_subset(df)
 
     save_outputs(events)
-
     print()
     return df, events, edges, binary_df
 

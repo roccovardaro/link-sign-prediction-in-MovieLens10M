@@ -1,85 +1,97 @@
 """
-Step 1 – Acquisizione dei dati.
+Step 1 – Acquisizione dei dati (MovieLens 10M).
 
-Carica il file review JSONL, conserva solo le colonne richieste,
-unisce titolo e testo in un unico campo testuale.
+Carica ratings.dat e movies.dat, unisce i metadati dei film (titolo e generi),
+converte il timestamp in formato datetime e salva raw_ratings.csv.
 """
 
+from pathlib import Path
 import pandas as pd
 
-from config import RAW_FILE, KEEP_COLUMNS, RAW_REVIEWS_CSV
+from config import (
+    RATINGS_FILE,
+    MOVIES_FILE,
+    RAW_RATINGS_CSV,
+    SAMPLE_SIZE,
+    KEEP_COLUMNS,
+)
 
 
-def load_reviews(path=RAW_FILE, columns=KEEP_COLUMNS):
+def load_movies(movies_path: Path = MOVIES_FILE) -> pd.DataFrame:
+    """Carica movies.dat contenente [movie_id, title, genres]."""
+    if not movies_path.exists():
+        raise FileNotFoundError(f"File film non trovato: {movies_path.resolve()}")
+
+    df_movies = pd.read_csv(
+        movies_path,
+        sep="::",
+        names=["movie_id", "title", "genres"],
+        engine="python",
+        encoding="utf-8",
+    )
+    df_movies["movie_id"] = df_movies["movie_id"].astype(int)
+    df_movies["title"] = df_movies["title"].fillna("").astype(str).str.strip()
+    df_movies["genres"] = df_movies["genres"].fillna("").astype(str).str.strip()
+    return df_movies
+
+
+def load_ratings(
+    ratings_path: Path = RATINGS_FILE,
+    sample_size: int = SAMPLE_SIZE,
+    random_state: int = 42,
+) -> pd.DataFrame:
     """
-    Carica il file JSONL delle recensioni e restituisce un DataFrame
-    con le sole colonne di interesse.
-
-    Parameters
-    ----------
-    path : Path
-        Percorso del file JSONL grezzo.
-    columns : list[str]
-        Colonne da conservare.
-
-    Returns
-    -------
-    pd.DataFrame
+    Carica ratings.dat contenente [user_id, movie_id, rating, timestamp].
+    Se sample_size è specificato, estrae un campione casuale riproducibile.
     """
-    if not path.exists():
-        raise FileNotFoundError(f"File non trovato: {path.resolve()}")
+    if not ratings_path.exists():
+        raise FileNotFoundError(f"File rating non trovato: {ratings_path.resolve()}")
 
-    df = pd.read_json(path, lines=True)
-    #df = df.drop(df.sample(frac=80 / 100, random_state=42).index) #TODO percentuale righe x
-    missing = [c for c in columns if c not in df.columns]
-    if missing:
-        raise KeyError(f"Colonne mancanti nel file: {missing}")
+    print(f"  Lettura ratings da: {ratings_path.name}...")
+    df = pd.read_csv(
+        ratings_path,
+        sep="::",
+        names=["user_id", "movie_id", "rating", "timestamp"],
+        engine="python",
+        dtype={"user_id": int, "movie_id": int, "rating": float, "timestamp": int},
+    )
+    print(f"  Valutazioni totali caricate: {len(df):,}")
 
-    df = df[columns].copy()
+    if sample_size is not None and len(df) > sample_size:
+        print(f"  Campionamento di {sample_size:,} valutazioni (random_state={random_state})...")
+        df = df.sample(n=sample_size, random_state=random_state)
+
+    # Converti timestamp unix in datetime
+    df["timestamp"] = pd.to_datetime(df["timestamp"], unit="s")
+    df = df.sort_values("timestamp").reset_index(drop=True)
     return df
 
 
-def merge_title_text(df):
-    """
-    Unisce title e text in un unico campo 'review_text'.
-    Il titolo viene anteposto al testo, separato da un punto e spazio.
-    Se uno dei due è mancante, viene usato solo l'altro.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        DataFrame con colonne 'title' e 'text'.
-
-    Returns
-    -------
-    pd.DataFrame
-        DataFrame con la nuova colonna 'review_text';
-        le colonne 'title' e 'text' originali vengono rimosse.
-    """
-    title = df["title"].fillna("").astype(str).str.strip()
-    text = df["text"].fillna("").astype(str).str.strip()
-
-    # Concatena: "titolo. testo" – evita ". " iniziale se titolo vuoto
-    df["review_text"] = (title + ". " + text).str.strip(". ").str.strip()
-
-    # Se entrambi sono vuoti, il campo resta stringa vuota
-    df.drop(columns=["title", "text"], inplace=True)
-    return df
-
-
-def run(path=RAW_FILE, output_csv=RAW_REVIEWS_CSV):
-    """Esegue lo step 1 completo e salva il DataFrame in CSV."""
+def run(
+    ratings_path: Path = RATINGS_FILE,
+    movies_path: Path = MOVIES_FILE,
+    output_csv: Path = RAW_RATINGS_CSV,
+    sample_size: int = SAMPLE_SIZE,
+) -> pd.DataFrame:
+    """Esegue lo Step 1 completo e salva il DataFrame unito in CSV."""
     print("=" * 60)
-    print("STEP 1 – Acquisizione dei dati")
+    print("STEP 1 – Acquisizione dei dati (MovieLens 10M)")
     print("=" * 60)
 
-    df = load_reviews(path)
-    print(f"  Righe caricate: {len(df):,}")
-    print(f"  Colonne: {list(df.columns)}")
+    df_ratings = load_ratings(ratings_path, sample_size=sample_size)
+    df_movies = load_movies(movies_path)
 
-    df = merge_title_text(df)
-    print(f"  Campo 'review_text' creato (title + text uniti)")
-    print(f"  Colonne finali: {list(df.columns)}")
+    # Merge delle valutazioni con i metadati dei film
+    df = df_ratings.merge(df_movies, on="movie_id", how="left")
+
+    # Ordina colonne secondo KEEP_COLUMNS
+    cols = [c for c in KEEP_COLUMNS if c in df.columns]
+    df = df[cols].copy()
+
+    print(f"  Righe finali acquisite: {len(df):,}")
+    print(f"  Utenti unici:           {df['user_id'].nunique():,}")
+    print(f"  Film unici:             {df['movie_id'].nunique():,}")
+    print(f"  Colonne:                {list(df.columns)}")
 
     output_csv.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(output_csv, index=False)

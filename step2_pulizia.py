@@ -1,173 +1,143 @@
 """
-
-Step 2 – Pulizia ed esplorazione.
+Step 2 – Pulizia ed esplorazione (MovieLens 10M).
 
 Operazioni:
-  - Validazione tipi (identificativi, rating, timestamp)
-  - Gestione valori mancanti
+  - Validazione dei tipi di dati (user_id, movie_id, rating, timestamp)
+  - Gestione valori mancanti o rating fuori intervallo [0.5, 5.0]
   - Rimozione duplicati esatti
-  - Mantenimento delle recensioni ripetute della stessa coppia (user, product)
-  - Pulizia HTML e spazi superflui dal testo
   - Ordinamento cronologico
-  - Flag per recensioni senza testo
-  - Calcolo statistiche esplorative
+  - Calcolo e salvataggio statistiche esplorative del dataset
 """
 
 import json
-import re
+from pathlib import Path
 import pandas as pd
 
-from config import RESULTS_DIR, STATS_FILE, RAW_REVIEWS_CSV, CLEAN_REVIEWS_CSV
+from config import (
+    RAW_RATINGS_CSV,
+    CLEAN_RATINGS_CSV,
+    STATS_FILE,
+)
 
 
-# ── Pulizia ──────────────────────────────────────────────────────────────
-
-def validate_types(df):
-    """Assicura i tipi corretti per le colonne chiave."""
-    df["user_id"] = df["user_id"].astype(str)
-    df["parent_asin"] = df["parent_asin"].astype(str)
+def validate_types(df: pd.DataFrame) -> pd.DataFrame:
+    """Assicura tipi corretti per le colonne chiave."""
+    df["user_id"] = pd.to_numeric(df["user_id"], errors="coerce").fillna(-1).astype(int)
+    df["movie_id"] = pd.to_numeric(df["movie_id"], errors="coerce").fillna(-1).astype(int)
     df["rating"] = pd.to_numeric(df["rating"], errors="coerce")
     df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+    if "title" in df.columns:
+        df["title"] = df["title"].fillna("").astype(str)
+    if "genres" in df.columns:
+        df["genres"] = df["genres"].fillna("").astype(str)
     return df
 
 
-def handle_missing(df):
+def handle_missing(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Gestisce i valori mancanti:
-      - Rimuove righe senza user_id, parent_asin o rating validi.
-      - Le recensioni senza testo sono mantenute e segnalate con flag.
+    Rimuove record invalidi:
+      - user_id o movie_id mancanti (<= 0)
+      - rating mancante o non compreso tra 0.5 e 5.0
+      - timestamp mancante
     """
     before = len(df)
-    df = df.dropna(subset=["user_id", "parent_asin", "rating"]).copy()
-    # Rating deve essere intero 1-5
-    df = df[df["rating"].between(1, 5)].copy()
-    df["rating"] = df["rating"].astype(int)
-
-    # Flag: testo assente
-    df["has_text"] = df["review_text"].astype(str).str.strip().ne("")
-
+    valid_mask = (
+        (df["user_id"] > 0)
+        & (df["movie_id"] > 0)
+        & df["rating"].between(0.5, 5.0)
+        & df["timestamp"].notna()
+    )
+    df = df[valid_mask].copy()
     after = len(df)
     print(f"  Valori mancanti/invalidi rimossi: {before - after:,}")
     return df
 
 
-def remove_exact_duplicates(df):
-    """Rimuove duplicati completamente identici su tutte le colonne."""
+def remove_exact_duplicates(df: pd.DataFrame) -> pd.DataFrame:
+    """Rimuove eventuali duplicati esatti mantenendo l'ultima occorrenza."""
     before = len(df)
-    df = df.drop_duplicates().copy()
+    df = df.drop_duplicates(subset=["user_id", "movie_id", "timestamp"]).copy()
     after = len(df)
-    print(f"  Duplicati esatti rimossi: {before - after:,}")
+    print(f"  Duplicati rimossi: {before - after:,}")
     return df
 
 
-
-
-def clean_html_and_whitespace(text):
-    """Rimuove tag HTML e spazi/newline superflui da una stringa."""
-    if not isinstance(text, str) or text.strip() == "":
-        return text
-    # Rimuove tag HTML
-    text = re.sub(r"<[^>]+>", " ", text)
-    # Rimuove entità HTML comuni
-    text = re.sub(r"&[a-zA-Z]+;", " ", text)
-    # Normalizza spazi/newline multipli
-    text = re.sub(r"\s+", " ", text).strip()
-    return text
-
-
-def clean_text_column(df):
-    """Applica la pulizia HTML/spazi alla colonna review_text."""
-    df["review_text"] = df["review_text"].apply(clean_html_and_whitespace)
-    print("  Pulizia HTML e spazi completata")
-    return df
-
-
-def sort_chronologically(df):
+def sort_chronologically(df: pd.DataFrame) -> pd.DataFrame:
     """Ordina il DataFrame per timestamp crescente."""
     df = df.sort_values("timestamp").reset_index(drop=True)
     print("  Ordinamento cronologico completato")
     return df
 
 
-# ── Esplorazione ─────────────────────────────────────────────────────────
+def compute_stats(df: pd.DataFrame) -> dict:
+    """Calcola statistiche descrittive ed esplorative sul dataset pulito."""
+    user_counts = df.groupby("user_id").size()
+    movie_counts = df.groupby("movie_id").size()
 
-def compute_stats(df):
-    """
-    Calcola statistiche esplorative:
-      - Numerosità totale
-      - Distribuzione delle stelle
-      - Attività utenti (recensioni per utente)
-      - Popolarità prodotti (recensioni per prodotto)
-      - Disponibilità testi
-      - Range temporale
-    """
+    rating_dist = df["rating"].value_counts().sort_index().to_dict()
+
     stats = {
-        "totale_recensioni": int(len(df)),
+        "totale_valutazioni": int(len(df)),
         "utenti_unici": int(df["user_id"].nunique()),
-        "prodotti_unici": int(df["parent_asin"].nunique()),
-        "distribuzione_stelle": df["rating"].value_counts().sort_index().to_dict(),
-        "percentuale_con_testo": round(df["has_text"].mean() * 100, 2),
-        "recensioni_per_utente": {
-            "media": round(df.groupby("user_id").size().mean(), 2),
-            "mediana": float(df.groupby("user_id").size().median()),
-            "max": int(df.groupby("user_id").size().max()),
+        "film_unici": int(df["movie_id"].nunique()),
+        "distribuzione_valutazioni": {str(k): int(v) for k, v in rating_dist.items()},
+        "valutazioni_per_utente": {
+            "media": round(float(user_counts.mean()), 2),
+            "mediana": float(user_counts.median()),
+            "max": int(user_counts.max()),
+            "min": int(user_counts.min()),
         },
-        "recensioni_per_prodotto": {
-            "media": round(df.groupby("parent_asin").size().mean(), 2),
-            "mediana": float(df.groupby("parent_asin").size().median()),
-            "max": int(df.groupby("parent_asin").size().max()),
+        "valutazioni_per_film": {
+            "media": round(float(movie_counts.mean()), 2),
+            "mediana": float(movie_counts.median()),
+            "max": int(movie_counts.max()),
+            "min": int(movie_counts.min()),
         },
         "range_temporale": {
             "inizio": str(df["timestamp"].min()),
             "fine": str(df["timestamp"].max()),
         },
     }
-
-    # Converte le chiavi int a str per JSON
-    stats["distribuzione_stelle"] = {
-        str(k): int(v) for k, v in stats["distribuzione_stelle"].items()
-    }
-
     return stats
 
 
-def save_stats(stats, path=STATS_FILE):
-    """Salva le statistiche in formato JSON."""
+def save_stats(stats: dict, path: Path = STATS_FILE) -> None:
+    """Salva le statistiche in JSON."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         json.dump(stats, f, indent=2, ensure_ascii=False)
     print(f"  Statistiche salvate in: {path}")
 
 
-def print_stats(stats):
-    """Stampa un report esplorativo leggibile."""
-    print("\n  ── Report Esplorativo ──")
-    print(f"  Totale recensioni:    {stats['totale_recensioni']:,}")
+def print_stats(stats: dict) -> None:
+    """Stampa a video il report esplorativo."""
+    print("\n  ── Report Esplorativo MovieLens ──")
+    print(f"  Totale valutazioni:   {stats['totale_valutazioni']:,}")
     print(f"  Utenti unici:         {stats['utenti_unici']:,}")
-    print(f"  Prodotti unici:       {stats['prodotti_unici']:,}")
-    print(f"  Con testo:            {stats['percentuale_con_testo']}%")
-    print(f"  Range temporale:      {stats['range_temporale']['inizio']} → {stats['range_temporale']['fine']}")
-    print("  Distribuzione stelle:")
-    for star, count in sorted(stats["distribuzione_stelle"].items()):
-        print(f"    {star} stelle: {count:,}")
+    print(f"  Film unici:           {stats['film_unici']:,}")
+    print(f"  Periodo temporale:    {stats['range_temporale']['inizio']} → {stats['range_temporale']['fine']}")
+    print(f"  Valutazioni per user: media={stats['valutazioni_per_utente']['media']}, max={stats['valutazioni_per_utente']['max']}")
+    print(f"  Valutazioni per film: media={stats['valutazioni_per_film']['media']}, max={stats['valutazioni_per_film']['max']}")
+    print("  Distribuzione voti:")
+    for star, count in sorted(stats["distribuzione_valutazioni"].items(), key=lambda x: float(x[0])):
+        print(f"    {star:>3s} ★: {count:,}")
     print()
 
 
-# ── Entry point ──────────────────────────────────────────────────────────
-
-def run(input_path=RAW_REVIEWS_CSV, output_path=CLEAN_REVIEWS_CSV):
-    """Esegue lo step 2 completo: pulizia + esplorazione."""
+def run(
+    input_path: Path = RAW_RATINGS_CSV,
+    output_path: Path = CLEAN_RATINGS_CSV,
+) -> tuple[pd.DataFrame, dict]:
+    """Esegue lo Step 2 completo: pulizia + esplorazione."""
     print("=" * 60)
     print("STEP 2 – Pulizia ed esplorazione")
     print("=" * 60)
-
     print(f"  Caricamento dati da: {input_path}")
     df = pd.read_csv(input_path)
 
     df = validate_types(df)
     df = handle_missing(df)
     df = remove_exact_duplicates(df)
-    df = clean_text_column(df)
     df = sort_chronologically(df)
 
     stats = compute_stats(df)
@@ -176,11 +146,10 @@ def run(input_path=RAW_REVIEWS_CSV, output_path=CLEAN_REVIEWS_CSV):
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(output_path, index=False)
-    print(f"  Recensioni pulite salvate in: {output_path}\n")
+    print(f"  Dati puliti salvati in: {output_path}\n")
 
     return df, stats
 
 
 if __name__ == "__main__":
     df, stats = run()
-    print(df.head())
