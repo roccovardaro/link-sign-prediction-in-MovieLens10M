@@ -14,7 +14,6 @@ Feature impiegate:
                                 user_days_since_last, movie_days_since_last
   - Affinità e coppie:          genre_match_score, svd_similarity, already_connected
 """
-
 from pathlib import Path
 import joblib
 import numpy as np
@@ -44,18 +43,14 @@ from config import (
 SIGN_FEATURE_COLS = [
     "user_mean_rating",
     "user_frac_pos",
-    "user_frac_neg",
-    "user_n_reviews",
-    "user_days_since_last",
     "movie_mean_rating",
     "movie_frac_pos",
-    "movie_frac_neg",
-    "movie_n_reviews",
+    "user_days_since_last",
     "movie_days_since_last",
     "genre_match_score",
     "svd_similarity",
-    "already_connected",
 ]
+
 
 TARGET_COL = "binary_label"
 

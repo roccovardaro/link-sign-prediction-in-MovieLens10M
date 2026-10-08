@@ -24,7 +24,7 @@ RESULTS_DIR    = ROOT_DIR / "results"
 # MovieLens 10M contiene oltre 10 milioni di valutazioni.
 # Impostare un intero (es. 100_000) per campionare le righe più recenti o casuali
 # in modo da garantire tempi di calcolo rapidi e reattivi, oppure None per l'intero dataset.
-SAMPLE_SIZE = 1_000_000
+SAMPLE_SIZE = 10_000_000
 
 # ── Colonne dataset ─────────────────────────────────────────────────────
 # Nomi colonne standardizzati per MovieLens
@@ -64,6 +64,11 @@ TRAIN_CSV         = CSV_PROCESSED / "train.csv"
 VAL_CSV           = CSV_PROCESSED / "val.csv"
 TEST_CSV          = CSV_PROCESSED / "test.csv"
 
+# Dataset dedicati a Link Prediction (coppie positive e negative con link_exists)
+TRAIN_LINK_CSV    = CSV_PROCESSED / "train_link.csv"
+VAL_LINK_CSV      = CSV_PROCESSED / "val_link.csv"
+TEST_LINK_CSV     = CSV_PROCESSED / "test_link.csv"
+
 # Alias per retrocompatibilità
 RAW_REVIEWS_CSV   = RAW_RATINGS_CSV
 CLEAN_REVIEWS_CSV = CLEAN_RATINGS_CSV
@@ -73,6 +78,10 @@ EVENTS_TABLE_FILE = DATA_PROCESSED / "events.parquet"
 TRAIN_FILE        = DATA_PROCESSED / "train.parquet"
 VAL_FILE          = DATA_PROCESSED / "val.parquet"
 TEST_FILE         = DATA_PROCESSED / "test.parquet"
+
+TRAIN_LINK_FILE   = DATA_PROCESSED / "train_link.parquet"
+VAL_LINK_FILE     = DATA_PROCESSED / "val_link.parquet"
+TEST_LINK_FILE    = DATA_PROCESSED / "test_link.parquet"
 
 # ── File risultati e statistiche ────────────────────────────────────────
 STATS_FILE      = RESULTS_DIR / "exploration_stats.json"

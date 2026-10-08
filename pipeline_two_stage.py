@@ -23,12 +23,19 @@ from sklearn.metrics import classification_report, confusion_matrix
 
 from config import (
     TEST_CSV,
+    EVENTS_CSV,
     LINK_MODEL_FILE,
     SIGN_MODEL_FILE,
+    TEST_LINK_FILE,
+    TEST_LINK_CSV,
+)
+from step6_features import (
+    LINK_FEATURE_COLS,
+    extract_link_features,
+    load_dataset,
 )
 from step7_link_prediction import (
     run as run_link_stage,
-    LINK_FEATURE_COLS,
     generate_negative_samples,
 )
 from step8_sign_prediction import (
@@ -43,6 +50,10 @@ def load_or_train_models():
         print("  Caricamento modelli pre-addestrati da disco...")
         link_bundle = joblib.load(LINK_MODEL_FILE)
         sign_bundle = joblib.load(SIGN_MODEL_FILE)
+        if link_bundle.get("features") != LINK_FEATURE_COLS:
+            print("  Schema feature aggiornato: riaddestramento modello link...")
+            model, scaler, _ = run_link_stage()
+            link_bundle = {"model": model, "scaler": scaler, "features": LINK_FEATURE_COLS}
     else:
         print("  Modelli non trovati, avvio addestramento dei due stadi...")
         link_model, link_scaler, _ = run_link_stage()
@@ -61,25 +72,18 @@ def prepare_joint_test_set(test_path: Path = TEST_CSV, ratio: float = 0.5, seed:
     df = pd.read_csv(test_path)
 
     # 1. Positivi reali: link_exists=1, sign_true=binary_label (0 o 1)
-    pos = df.copy()
-    if "preferential_attachment" not in pos.columns:
-        pos["preferential_attachment"] = pos["user_degree"].fillna(0) * pos["movie_degree"].fillna(0)
-    if "log_user_degree" not in pos.columns:
-        pos["log_user_degree"] = np.log1p(pos["user_degree"].fillna(0))
-    if "log_movie_degree" not in pos.columns:
-        pos["log_movie_degree"] = np.log1p(pos["movie_degree"].fillna(0))
+    events = pd.read_csv(EVENTS_CSV, parse_dates=["timestamp"])
+    pos = extract_link_features(df, events)
     if "genre_match_score" not in pos.columns:
         pos["genre_match_score"] = 0.0
     if "svd_similarity" not in pos.columns:
         pos["svd_similarity"] = 0.0
-    if "already_connected" not in pos.columns:
-        pos["already_connected"] = 0
 
     pos["link_true"] = 1
     pos["sign_true"] = pos["binary_label"]
 
     # 2. Negativi campionati: link_exists=0, sign_true=-1 (nessun segno)
-    neg = generate_negative_samples(df, ratio=ratio, seed=seed)
+    neg = generate_negative_samples(df, ratio=ratio, seed=seed, events_df=events)
     neg["link_true"] = 0
     neg["sign_true"] = -1
 
@@ -178,24 +182,12 @@ def predict_pair(user_dict: dict, movie_dict: dict, link_bundle: dict, sign_bund
     link_model, link_scaler = link_bundle["model"], link_bundle.get("scaler")
     sign_model, sign_scaler = sign_bundle["model"], sign_bundle.get("scaler")
 
-    u_deg = user_dict.get("user_degree", 0)
-    m_deg = movie_dict.get("movie_degree", 0)
-    pref_att = u_deg * m_deg
-
-    link_row = pd.DataFrame([{
-        "user_degree": u_deg,
-        "movie_degree": m_deg,
-        "preferential_attachment": pref_att,
-        "log_user_degree": np.log1p(u_deg),
-        "log_movie_degree": np.log1p(m_deg),
-        "user_n_reviews": user_dict.get("user_n_reviews", 0),
-        "movie_n_reviews": movie_dict.get("movie_n_reviews", 0),
-        "user_days_since_last": user_dict.get("user_days_since_last", 0),
-        "movie_days_since_last": movie_dict.get("movie_days_since_last", 0),
-        "genre_match_score": user_dict.get("genre_match_score", 0.0),
-        "svd_similarity": user_dict.get("svd_similarity", 0.0),
-        "already_connected": user_dict.get("already_connected", 0),
-    }])[LINK_FEATURE_COLS]
+    # Le feature di coppia devono provenire dallo stesso estrattore temporale.
+    values = {**user_dict, **movie_dict}
+    missing = [col for col in LINK_FEATURE_COLS if col not in values]
+    if missing:
+        raise ValueError(f"Feature mancanti: {missing}. Usare extract_link_features per la coppia.")
+    link_row = pd.DataFrame([values])[LINK_FEATURE_COLS].fillna(0)
 
     if link_scaler is not None:
         link_row_eval = link_scaler.transform(link_row)

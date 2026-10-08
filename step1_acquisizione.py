@@ -13,8 +13,7 @@ from config import (
     MOVIES_FILE,
     RAW_RATINGS_CSV,
     SAMPLE_SIZE,
-    KEEP_COLUMNS,
-)
+    KEEP_COLUMNS)
 
 
 def load_movies(movies_path: Path = MOVIES_FILE) -> pd.DataFrame:
