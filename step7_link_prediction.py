@@ -38,24 +38,14 @@ from config import (
     VAL_LINK_FILE,
     TEST_LINK_FILE,
     LINK_MODEL_FILE,
-    EVENTS_CSV,
 )
 
 from step6_features import (
     LINK_FEATURE_COLS,
     load_dataset,
-    sample_negative_pairs,
-    extract_link_features,
 )
 
 TARGET_COL = "link_exists"
-
-
-def generate_negative_samples(df: pd.DataFrame, ratio: float = 0.5, seed: int = 42, events_df: pd.DataFrame = None) -> pd.DataFrame:
-    """Helper di utilità per generare campioni negativi con feature causali estratte."""
-    events = events_df if events_df is not None else pd.read_csv(EVENTS_CSV)
-    negatives = sample_negative_pairs(df, events, ratio=ratio, seed=seed)
-    return extract_link_features(negatives, events)
 
 
 def load_link_data(parquet_path: Path, csv_path: Path):

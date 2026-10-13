@@ -33,14 +33,15 @@ from step6_features import (
     LINK_FEATURE_COLS,
     extract_link_features,
     load_dataset,
+    sample_negative_pairs,
 )
 from step7_link_prediction import (
     run as run_link_stage,
-    generate_negative_samples,
 )
 from step8_sign_prediction import (
     run as run_sign_stage,
     SIGN_FEATURE_COLS,
+    SIGN_THRESHOLD,
 )
 
 
@@ -50,6 +51,7 @@ def load_or_train_models():
         print("  Caricamento modelli pre-addestrati da disco...")
         link_bundle = joblib.load(LINK_MODEL_FILE)
         sign_bundle = joblib.load(SIGN_MODEL_FILE)
+        sign_bundle.setdefault("threshold", SIGN_THRESHOLD)
         if link_bundle.get("features") != LINK_FEATURE_COLS:
             print("  Schema feature aggiornato: riaddestramento modello link...")
             model, scaler, _ = run_link_stage()
@@ -57,9 +59,11 @@ def load_or_train_models():
     else:
         print("  Modelli non trovati, avvio addestramento dei due stadi...")
         link_model, link_scaler, _ = run_link_stage()
-        sign_model, sign_scaler, _ = run_sign_stage()
+        sign_res = run_sign_stage()
+        sign_model, sign_scaler = sign_res[0], sign_res[1]
+        sign_threshold = sign_res[3] if len(sign_res) > 3 else SIGN_THRESHOLD
         link_bundle = {"model": link_model, "scaler": link_scaler}
-        sign_bundle = {"model": sign_model, "scaler": sign_scaler}
+        sign_bundle = {"model": sign_model, "scaler": sign_scaler, "threshold": sign_threshold}
 
     return link_bundle, sign_bundle
 
@@ -83,7 +87,8 @@ def prepare_joint_test_set(test_path: Path = TEST_CSV, ratio: float = 0.5, seed:
     pos["sign_true"] = pos["binary_label"]
 
     # 2. Negativi campionati: link_exists=0, sign_true=-1 (nessun segno)
-    neg = generate_negative_samples(df, ratio=ratio, seed=seed, events_df=events)
+    neg_pairs = sample_negative_pairs(df, events, ratio=ratio, seed=seed)
+    neg = extract_link_features(neg_pairs, events)
     neg["link_true"] = 0
     neg["sign_true"] = -1
 
@@ -106,6 +111,7 @@ def run_cascade_evaluation(link_bundle: dict, sign_bundle: dict, test_df: pd.Dat
     """Esegue la valutazione end-to-end della cascata a due stadi sul test set."""
     link_model, link_scaler = link_bundle["model"], link_bundle.get("scaler")
     sign_model, sign_scaler = sign_bundle["model"], sign_bundle.get("scaler")
+    sign_threshold = sign_bundle.get("threshold", SIGN_THRESHOLD)
 
     print("\n" + "=" * 60)
     print("VALUTAZIONE PIPELINE A DUE STADI (END-TO-END)")
@@ -134,7 +140,7 @@ def run_cascade_evaluation(link_bundle: dict, sign_bundle: dict, test_df: pd.Dat
     mask_pred_link = pred_link == 1
     n_pred_links = mask_pred_link.sum()
 
-    print(f"\n  ── Risultati Stadio 2 (Sign Prediction su {n_pred_links:,} link previsti) ──")
+    print(f"\n  ── Risultati Stadio 2 (Sign Prediction su {n_pred_links:,} link previsti | Soglia = {sign_threshold:.2f}) ──")
 
     # Classi finali a cascata:
     # 0 = Nessun link predetto
@@ -149,7 +155,8 @@ def run_cascade_evaluation(link_bundle: dict, sign_bundle: dict, test_df: pd.Dat
         X_sign_sub = X_sign_sub.fillna(0.0)
 
         X_sign_eval = sign_scaler.transform(X_sign_sub) if sign_scaler is not None else X_sign_sub
-        pred_sign = sign_model.predict(X_sign_eval)
+        sign_proba = sign_model.predict_proba(X_sign_eval)[:, 1]
+        pred_sign = (sign_proba >= sign_threshold).astype(int)
 
         # segno 0 -> classe 1 (negativa); segno 1 -> classe 2 (positiva)
         y_pred_cascade[mask_pred_link] = np.where(pred_sign == 1, 2, 1)
@@ -227,8 +234,9 @@ def predict_pair(user_dict: dict, movie_dict: dict, link_bundle: dict, sign_bund
     else:
         sign_row_eval = sign_row
 
+    sign_threshold = sign_bundle.get("threshold", SIGN_THRESHOLD)
     sign_proba = float(sign_model.predict_proba(sign_row_eval)[0, 1])
-    sign_label = "positiva" if sign_proba >= 0.5 else "negativa"
+    sign_label = "positiva" if sign_proba >= sign_threshold else "negativa"
 
     return {
         "link_exists": True,

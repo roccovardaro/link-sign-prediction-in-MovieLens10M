@@ -52,6 +52,7 @@ SIGN_FEATURE_COLS = [
 ]
 
 
+SIGN_THRESHOLD = 0.4
 TARGET_COL = "binary_label"
 
 
@@ -73,12 +74,12 @@ def load_and_prepare_sign_dataset(csv_path: Path):
     return X, y
 
 
-def evaluate(model, X, y, split_name: str, scaler=None) -> dict:
+def evaluate(model, X, y, split_name: str, scaler=None, threshold: float = SIGN_THRESHOLD) -> dict:
     """Calcola e stampa le metriche essenziali per la classificazione del segno."""
     X_eval = scaler.transform(X) if scaler is not None else X
 
-    y_pred = model.predict(X_eval)
     y_proba = model.predict_proba(X_eval)[:, 1]
+    y_pred = (y_proba >= threshold).astype(int)
 
     metrics = {
         "accuracy": accuracy_score(y, y_pred),
@@ -90,7 +91,7 @@ def evaluate(model, X, y, split_name: str, scaler=None) -> dict:
         "roc_auc": roc_auc_score(y, y_proba),
     }
 
-    print(f"\n  ── Metriche Sign Prediction [{split_name}] ──")
+    print(f"\n  ── Metriche Sign Prediction [{split_name}] (Soglia = {threshold:.2f}) ──")
     for k, v in metrics.items():
         print(f"  {k:<14}: {v:.4f}")
 
@@ -111,6 +112,7 @@ def run(
     test_path: Path = TEST_CSV,
     save_model: bool = True,
     model_type: str = "gbm",
+    threshold: float = SIGN_THRESHOLD,
 ):
     """Addestramento e test del modello di Sign Prediction (Stadio 2)."""
     print("=" * 60)
@@ -137,7 +139,7 @@ def run(
     else:
         print("\n  Addestramento HistGradientBoostingClassifier (class_weight='balanced')...")
         model = HistGradientBoostingClassifier(
-            max_iter=150,
+            max_iter=300,
             learning_rate=0.08,
             max_depth=6,
             class_weight="balanced",
@@ -145,8 +147,8 @@ def run(
         )
         model.fit(X_train, y_train)
 
-    evaluate(model, X_val, y_val, "Validation", scaler=scaler)
-    test_metrics = evaluate(model, X_test, y_test, "Test", scaler=scaler)
+    evaluate(model, X_val, y_val, "Validation", scaler=scaler, threshold=threshold)
+    test_metrics = evaluate(model, X_test, y_test, "Test", scaler=scaler, threshold=threshold)
 
     if save_model:
         SIGN_MODEL_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -154,13 +156,14 @@ def run(
             "model": model,
             "scaler": scaler,
             "features": SIGN_FEATURE_COLS,
+            "threshold": threshold,
             "model_type": model_type,
         }, SIGN_MODEL_FILE)
-        print(f"\n  Modello Sign Prediction salvato in: {SIGN_MODEL_FILE}")
+        print(f"\n  Modello Sign Prediction salvato in: {SIGN_MODEL_FILE} (Soglia: {threshold:.2f})")
 
     print("\nStadio 2 completato con successo.\n")
-    return model, scaler, test_metrics
+    return model, scaler, test_metrics, threshold
 
 
 if __name__ == "__main__":
-    model, scaler, metrics = run()
+    model, scaler, metrics, threshold = run()
