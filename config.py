@@ -69,6 +69,11 @@ TRAIN_LINK_CSV    = CSV_PROCESSED / "train_link.csv"
 VAL_LINK_CSV      = CSV_PROCESSED / "val_link.csv"
 TEST_LINK_CSV     = CSV_PROCESSED / "test_link.csv"
 
+# Dataset dedicati a Sign Prediction (classificazione binaria positiva/negativa)
+TRAIN_SIGN_CSV    = CSV_PROCESSED / "train_sign.csv"
+VAL_SIGN_CSV      = CSV_PROCESSED / "val_sign.csv"
+TEST_SIGN_CSV     = CSV_PROCESSED / "test_sign.csv"
+
 # Alias per retrocompatibilità
 RAW_REVIEWS_CSV   = RAW_RATINGS_CSV
 CLEAN_REVIEWS_CSV = CLEAN_RATINGS_CSV
@@ -82,6 +87,10 @@ TEST_FILE         = DATA_PROCESSED / "test.parquet"
 TRAIN_LINK_FILE   = DATA_PROCESSED / "train_link.parquet"
 VAL_LINK_FILE     = DATA_PROCESSED / "val_link.parquet"
 TEST_LINK_FILE    = DATA_PROCESSED / "test_link.parquet"
+
+TRAIN_SIGN_FILE   = DATA_PROCESSED / "train_sign.parquet"
+VAL_SIGN_FILE     = DATA_PROCESSED / "val_sign.parquet"
+TEST_SIGN_FILE    = DATA_PROCESSED / "test_sign.parquet"
 
 # ── File risultati e statistiche ────────────────────────────────────────
 STATS_FILE      = RESULTS_DIR / "exploration_stats.json"

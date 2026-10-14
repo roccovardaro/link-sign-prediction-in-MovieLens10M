@@ -36,42 +36,35 @@ from config import (
     TRAIN_CSV,
     VAL_CSV,
     TEST_CSV,
+    TRAIN_FILE,
+    VAL_FILE,
+    TEST_FILE,
+    TRAIN_SIGN_CSV,
+    VAL_SIGN_CSV,
+    TEST_SIGN_CSV,
+    TRAIN_SIGN_FILE,
+    VAL_SIGN_FILE,
+    TEST_SIGN_FILE,
     SIGN_MODEL_FILE,
 )
-
-# ── Feature per la predizione del Segno ─────────────────────────────────
-SIGN_FEATURE_COLS = [
-    "user_mean_rating",
-    "user_frac_pos",
-    "movie_mean_rating",
-    "movie_frac_pos",
-    "user_days_since_last",
-    "movie_days_since_last",
-    "genre_match_score",
-    "svd_similarity",
-]
-
+from step6_1 import (
+    SIGN_FEATURE_COLS,
+    TARGET_COL,
+    load_sign_data,
+    load_dataset,
+)
 
 SIGN_THRESHOLD = 0.4
-TARGET_COL = "binary_label"
 
 
-def load_and_prepare_sign_dataset(csv_path: Path):
-    """Carica lo split ed estrae la matrice X e il target binario del segno."""
-    df = pd.read_csv(csv_path)
-
-    for col in SIGN_FEATURE_COLS:
-        if col not in df.columns:
-            df[col] = 0.0
-
-    X = df[SIGN_FEATURE_COLS].copy()
-    # Imputazione valori mancanti: medie rating con default neutro (3.5)
-    X["user_mean_rating"] = X["user_mean_rating"].fillna(3.5)
-    X["movie_mean_rating"] = X["movie_mean_rating"].fillna(3.5)
-    X = X.fillna(0.0)
-
-    y = df[TARGET_COL].astype(int)
-    return X, y
+def load_and_prepare_sign_dataset(parquet_path: Path = None, csv_path: Path = None):
+    """Carica lo split ed estrae la matrice X e il target binario del segno tramite step6_1."""
+    if parquet_path is not None and parquet_path.exists():
+        return load_sign_data(parquet_path, csv_path)
+    if csv_path is not None and csv_path.exists():
+        return load_sign_data(parquet_path, csv_path)
+    # Fallback su train.parquet / train.csv se i file dedicati non sono ancora generati
+    return load_sign_data(TRAIN_FILE, TRAIN_CSV)
 
 
 def evaluate(model, X, y, split_name: str, scaler=None, threshold: float = SIGN_THRESHOLD) -> dict:
@@ -107,9 +100,12 @@ def evaluate(model, X, y, split_name: str, scaler=None, threshold: float = SIGN_
 
 
 def run(
-    train_path: Path = TRAIN_CSV,
-    val_path: Path = VAL_CSV,
-    test_path: Path = TEST_CSV,
+    train_file: Path = TRAIN_SIGN_FILE,
+    train_csv: Path = TRAIN_SIGN_CSV,
+    val_file: Path = VAL_SIGN_FILE,
+    val_csv: Path = VAL_SIGN_CSV,
+    test_file: Path = TEST_SIGN_FILE,
+    test_csv: Path = TEST_SIGN_CSV,
     save_model: bool = True,
     model_type: str = "gbm",
     threshold: float = SIGN_THRESHOLD,
@@ -123,9 +119,16 @@ def run(
         print(f"    - {f}")
 
     print("\n  Caricamento split...")
-    X_train, y_train = load_and_prepare_sign_dataset(train_path)
-    X_val, y_val = load_and_prepare_sign_dataset(val_path)
-    X_test, y_test = load_and_prepare_sign_dataset(test_path)
+    t_f = train_file if train_file.exists() else TRAIN_FILE
+    t_c = train_csv if train_csv.exists() else TRAIN_CSV
+    v_f = val_file if val_file.exists() else VAL_FILE
+    v_c = val_csv if val_csv.exists() else VAL_CSV
+    te_f = test_file if test_file.exists() else TEST_FILE
+    te_c = test_csv if test_csv.exists() else TEST_CSV
+
+    X_train, y_train = load_and_prepare_sign_dataset(t_f, t_c)
+    X_val, y_val = load_and_prepare_sign_dataset(v_f, v_c)
+    X_test, y_test = load_and_prepare_sign_dataset(te_f, te_c)
 
     print(f"  Train: {len(X_train):,} righe | Val: {len(X_val):,} | Test: {len(X_test):,}")
 

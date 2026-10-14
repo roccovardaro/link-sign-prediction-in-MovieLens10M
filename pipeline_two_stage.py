@@ -56,6 +56,12 @@ def load_or_train_models():
             print("  Schema feature aggiornato: riaddestramento modello link...")
             model, scaler, _ = run_link_stage()
             link_bundle = {"model": model, "scaler": scaler, "features": LINK_FEATURE_COLS}
+        if sign_bundle.get("features") != SIGN_FEATURE_COLS:
+            print("  Schema feature aggiornato: riaddestramento modello sign...")
+            sign_res = run_sign_stage()
+            sign_model, sign_scaler = sign_res[0], sign_res[1]
+            sign_threshold = sign_res[3] if len(sign_res) > 3 else SIGN_THRESHOLD
+            sign_bundle = {"model": sign_model, "scaler": sign_scaler, "features": SIGN_FEATURE_COLS, "threshold": sign_threshold}
     else:
         print("  Modelli non trovati, avvio addestramento dei due stadi...")
         link_model, link_scaler, _ = run_link_stage()
