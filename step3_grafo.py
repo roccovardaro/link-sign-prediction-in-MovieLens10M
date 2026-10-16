@@ -17,7 +17,6 @@ from config import (
     CSV_PROCESSED,
     CLEAN_RATINGS_CSV,
     EVENTS_CSV,
-    EVENTS_TABLE_FILE,
 )
 
 
@@ -91,15 +90,11 @@ def build_binary_subset(df: pd.DataFrame, binary_map: dict = BINARY_LABEL_MAP) -
 
 
 def save_outputs(events: pd.DataFrame) -> None:
-    """Salva la tabella degli eventi in CSV e Parquet."""
-    DATA_PROCESSED.mkdir(parents=True, exist_ok=True)
+    """Salva la tabella degli eventi in CSV."""
     CSV_PROCESSED.mkdir(parents=True, exist_ok=True)
 
     events.to_csv(EVENTS_CSV, index=False)
     print(f"  Tabella eventi CSV salvata:     {EVENTS_CSV}")
-
-    events.to_parquet(EVENTS_TABLE_FILE, index=False)
-    print(f"  Tabella eventi Parquet salvata: {EVENTS_TABLE_FILE}")
 
 
 def run(input_path: Path = CLEAN_RATINGS_CSV):

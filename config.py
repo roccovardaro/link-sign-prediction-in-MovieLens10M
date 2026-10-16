@@ -77,20 +77,16 @@ TEST_SIGN_CSV     = CSV_PROCESSED / "test_sign.csv"
 # Alias per retrocompatibilità
 RAW_REVIEWS_CSV   = RAW_RATINGS_CSV
 CLEAN_REVIEWS_CSV = CLEAN_RATINGS_CSV
-
-# File Parquet (opzionali per salvataggio compatto)
-EVENTS_TABLE_FILE = DATA_PROCESSED / "events.parquet"
-TRAIN_FILE        = DATA_PROCESSED / "train.parquet"
-VAL_FILE          = DATA_PROCESSED / "val.parquet"
-TEST_FILE         = DATA_PROCESSED / "test.parquet"
-
-TRAIN_LINK_FILE   = DATA_PROCESSED / "train_link.parquet"
-VAL_LINK_FILE     = DATA_PROCESSED / "val_link.parquet"
-TEST_LINK_FILE    = DATA_PROCESSED / "test_link.parquet"
-
-TRAIN_SIGN_FILE   = DATA_PROCESSED / "train_sign.parquet"
-VAL_SIGN_FILE     = DATA_PROCESSED / "val_sign.parquet"
-TEST_SIGN_FILE    = DATA_PROCESSED / "test_sign.parquet"
+EVENTS_TABLE_FILE = EVENTS_CSV
+TRAIN_FILE        = TRAIN_CSV
+VAL_FILE          = VAL_CSV
+TEST_FILE         = TEST_CSV
+TRAIN_LINK_FILE   = TRAIN_LINK_CSV
+VAL_LINK_FILE     = VAL_LINK_CSV
+TEST_LINK_FILE    = TEST_LINK_CSV
+TRAIN_SIGN_FILE   = TRAIN_SIGN_CSV
+VAL_SIGN_FILE     = VAL_SIGN_CSV
+TEST_SIGN_FILE    = TEST_SIGN_CSV
 
 # ── File risultati e statistiche ────────────────────────────────────────
 STATS_FILE      = RESULTS_DIR / "exploration_stats.json"

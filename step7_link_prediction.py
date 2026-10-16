@@ -34,24 +34,14 @@ from config import (
     TRAIN_LINK_CSV,
     VAL_LINK_CSV,
     TEST_LINK_CSV,
-    TRAIN_LINK_FILE,
-    VAL_LINK_FILE,
-    TEST_LINK_FILE,
     LINK_MODEL_FILE,
 )
 
-from step6_features import (
+from features.link_features import (
     LINK_FEATURE_COLS,
-    load_dataset,
+    TARGET_COL,
+    load_link_data,
 )
-
-TARGET_COL = "link_exists"
-
-
-def load_link_data(parquet_path: Path, csv_path: Path):
-    """Carica il dataset preparato da Step 6 ed estrae matrice X e target binario."""
-    df = load_dataset(parquet_path, csv_path)
-    return df[LINK_FEATURE_COLS].fillna(0), df[TARGET_COL].astype(int)
 
 
 def evaluate(model, X, y, split_name: str, scaler=None) -> dict:
@@ -112,9 +102,9 @@ def run(
         print(f"    - {f}")
 
     print("\n  Caricamento dataset Link Prediction...")
-    X_train, y_train = load_link_data(TRAIN_LINK_FILE, TRAIN_LINK_CSV)
-    X_val, y_val     = load_link_data(VAL_LINK_FILE, VAL_LINK_CSV)
-    X_test, y_test   = load_link_data(TEST_LINK_FILE, TEST_LINK_CSV)
+    X_train, y_train = load_link_data(TRAIN_LINK_CSV)
+    X_val, y_val     = load_link_data(VAL_LINK_CSV)
+    X_test, y_test   = load_link_data(TEST_LINK_CSV)
 
     print(f"  Train: {len(X_train):,} coppie ({(y_train == 1).sum():,} reali, {(y_train == 0).sum():,} negative)")
     print(f"  Val:   {len(X_val):,} link reali (dati veri, no negative sampling)")

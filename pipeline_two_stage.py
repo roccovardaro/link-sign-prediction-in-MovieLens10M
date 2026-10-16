@@ -26,7 +26,6 @@ from config import (
     EVENTS_CSV,
     LINK_MODEL_FILE,
     SIGN_MODEL_FILE,
-    TEST_LINK_FILE,
     TEST_LINK_CSV,
 )
 from step6_features import (
@@ -86,8 +85,6 @@ def prepare_joint_test_set(test_path: Path = TEST_CSV, ratio: float = 0.5, seed:
     pos = extract_link_features(df, events)
     if "genre_match_score" not in pos.columns:
         pos["genre_match_score"] = 0.0
-    if "svd_similarity" not in pos.columns:
-        pos["svd_similarity"] = 0.0
 
     pos["link_true"] = 1
     pos["sign_true"] = pos["binary_label"]
@@ -219,21 +216,9 @@ def predict_pair(user_dict: dict, movie_dict: dict, link_bundle: dict, sign_bund
             "final_outcome": "Nessuna interazione prevista",
         }
 
-    sign_row = pd.DataFrame([{
-        "user_mean_rating": user_dict.get("user_mean_rating", 3.5),
-        "user_frac_pos": user_dict.get("user_frac_pos", 0.0),
-        "user_frac_neg": user_dict.get("user_frac_neg", 0.0),
-        "user_n_reviews": user_dict.get("user_n_reviews", 0),
-        "user_days_since_last": user_dict.get("user_days_since_last", 0),
-        "movie_mean_rating": movie_dict.get("movie_mean_rating", 3.5),
-        "movie_frac_pos": movie_dict.get("movie_frac_pos", 0.0),
-        "movie_frac_neg": movie_dict.get("movie_frac_neg", 0.0),
-        "movie_n_reviews": movie_dict.get("movie_n_reviews", 0),
-        "movie_days_since_last": movie_dict.get("movie_days_since_last", 0),
-        "genre_match_score": user_dict.get("genre_match_score", 0.0),
-        "svd_similarity": user_dict.get("svd_similarity", 0.0),
-        "already_connected": user_dict.get("already_connected", 0),
-    }])[SIGN_FEATURE_COLS]
+    values_sign = {**user_dict, **movie_dict}
+    sign_row_dict = {col: values_sign.get(col, 0.0) for col in SIGN_FEATURE_COLS}
+    sign_row = pd.DataFrame([sign_row_dict])[SIGN_FEATURE_COLS]
 
     if sign_scaler is not None:
         sign_row_eval = sign_scaler.transform(sign_row)

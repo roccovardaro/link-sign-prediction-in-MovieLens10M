@@ -1,67 +1,38 @@
 """
-Step 6.1 – Estrazione Caratteristiche Specifiche per la Sign Prediction (MovieLens 10M).
+features/sign_features.py – Estrazione Caratteristiche per la Sign Prediction (Stadio 2).
 
-Costruisce il dataset dedicato per lo Stadio 2 (Sign Prediction),
-sviluppato sulla falsa riga di quanto realizzato per la Link Prediction in Step 6.
+Modella la polarità dell'interazione (gradimento vs scontento) condizionata all'esistenza del link:
+  1 = Valutazione Positiva (rating 4.0 - 5.0)
+  0 = Valutazione Negativa (rating 0.5 - 2.5)
 
-Differenze concettuali rispetto allo Stadio 1:
-  - Link Prediction (Step 6/7): modella l'esistenza dell'arco (popolarità, grado, recency, attività).
-  - Sign Prediction (Step 6.1/8): modella la polarità dell'interazione (gradimento vs scontento)
-    condizionata all'esistenza del link:
-      1 = Valutazione Positiva (rating 4.0 - 5.0)
-      0 = Valutazione Negativa (rating 0.5 - 2.5)
-
-Caratteristiche specifiche per il Segno:
+Caratteristiche specifiche per il Segno (15 feature):
   1. Storico e Attitudine Utente:
-     - user_mean_rating: media storica dei voti assegnati (severità vs generosità)
-     - user_rating_std: deviazione standard storica (coerenza vs ampiezza d'uso della scala)
-     - user_frac_pos: percentuale di recensioni positive (>= 4.0)
-     - user_frac_neg: percentuale di recensioni negative (<= 2.5)
-     - user_review_count: volume di recensioni storiche (affidabilità statistica)
-  2. Storico e Percezione del Film:
-     - movie_mean_rating: voto medio storico ricevuto dal film
-     - movie_rating_std: deviazione standard dei voti (consenso unanime vs polarizzazione/controversia)
-     - movie_frac_pos: quota di giudizi positivi ricevuti
-     - movie_frac_neg: quota di giudizi negativi ricevuti
-     - movie_review_count: volume di recensioni storiche del film
-  3. Bias Relativo e Baseline di Gradimento (Koren Baseline Predictor):
-     - rating_baseline_score: mu + (user_mean - mu) + (movie_mean - mu)
-     - user_movie_rating_diff: user_mean_rating - movie_mean_rating
-     - user_movie_optimism: (user_frac_pos - 0.5) + (movie_frac_pos - 0.5)
+     - user_mean_rating, user_rating_std, user_frac_pos, user_frac_neg, user_review_count
+  2. Storico e Consenso del Film:
+     - movie_mean_rating, movie_rating_std, movie_frac_pos, movie_frac_neg, movie_review_count
+  3. Bias Relativo e Baseline di Gradimento (Koren Predictor):
+     - rating_baseline_score, user_movie_rating_diff, user_movie_optimism
   4. Affinità di Gusto Firmata per Genere:
-     - user_genre_mean_rating: voto medio storico dato dall'utente specificamente a questo genere
+     - user_genre_mean_rating
   5. Filtro Collaborativo Firmato (Signed SVD):
-     - signed_svd_similarity: cosine similarity tra fattori latenti SVD addestrati su rating centrati (r - mu)
+     - signed_svd_similarity
 """
 
-import time
 from pathlib import Path
-
+import time
 import numpy as np
 import pandas as pd
 from scipy.sparse import csr_matrix
 from sklearn.decomposition import TruncatedSVD
 
-from config import (
-    DATA_PROCESSED,
-    CSV_PROCESSED,
-    EVENTS_CSV,
-    EVENTS_TABLE_FILE,
-    TRAIN_CSV,
-    VAL_CSV,
-    TEST_CSV,
-    TRAIN_FILE,
-    VAL_FILE,
-    TEST_FILE,
-    TRAIN_SIGN_CSV,
-    VAL_SIGN_CSV,
-    TEST_SIGN_CSV,
-    TRAIN_SIGN_FILE,
-    VAL_SIGN_FILE,
-    TEST_SIGN_FILE,
+from features.common import (
+    GLOBAL_MEAN_RATING,
+    N_GENRES,
+    parse_genres_to_ids,
+    load_dataset,
 )
 
-# ── 15 Feature dedicate alla Sign Prediction ────────────────────────────
+# ── 15 Feature dedicate alla Sign Prediction (Stadio 2) ───────────────────
 SIGN_FEATURE_COLS = [
     # Attitudine e storico utente
     "user_mean_rating",        # Media storica voti utente
@@ -89,29 +60,8 @@ SIGN_FEATURE_COLS = [
     "signed_svd_similarity",   # Cosine similarity su SVD da rating centrati
 ]
 
+SIGN_FEATURE_NAMES_ONLINE = [f for f in SIGN_FEATURE_COLS if f != "signed_svd_similarity"]
 TARGET_COL = "binary_label"
-GLOBAL_MEAN_RATING = 3.5
-
-# Mappatura dei 19 generi unici di MovieLens a ID interi compatti (0..18)
-GENRE_MAP = {
-    "Action": 0, "Adventure": 1, "Animation": 2, "Children": 3, "Comedy": 4,
-    "Crime": 5, "Documentary": 6, "Drama": 7, "Fantasy": 8, "Film-Noir": 9,
-    "Horror": 10, "IMAX": 11, "Musical": 12, "Mystery": 13, "Romance": 14,
-    "Sci-Fi": 15, "Thriller": 16, "War": 17, "Western": 18,
-}
-N_GENRES = len(GENRE_MAP)
-GENRE_ID_CACHE = {}
-
-
-def parse_genres_to_ids(val) -> tuple:
-    """Converte la stringa dei generi in una tupla di ID interi con memorizzazione in cache."""
-    if not isinstance(val, str) or not val or val == "(no genres listed)":
-        return ()
-    res = GENRE_ID_CACHE.get(val)
-    if res is None:
-        res = tuple(GENRE_MAP[g] for g in val.split("|") if g in GENRE_MAP)
-        GENRE_ID_CACHE[val] = res
-    return res
 
 
 class UserSignState:
@@ -127,7 +77,7 @@ class UserSignState:
         self.genre_rsum = [0.0] * N_GENRES
         self.genre_cnt = [0] * N_GENRES
 
-    def update(self, r: float, gids: tuple):
+    def update(self, r: float, gids: tuple[int, ...]):
         self.rsum += r
         self.rsq_sum += r * r
         self.pos_cnt += int(r >= 4.0)
@@ -137,7 +87,7 @@ class UserSignState:
             self.genre_rsum[gid] += r
             self.genre_cnt[gid] += 1
 
-    def get_features(self, query_gids: tuple):
+    def get_features(self, query_gids: tuple[int, ...]):
         if self.cnt == 0:
             return GLOBAL_MEAN_RATING, 0.0, 0.5, 0.25, 0.0, GLOBAL_MEAN_RATING
 
@@ -148,7 +98,6 @@ class UserSignState:
         frac_neg = self.neg_cnt / self.cnt
         log_cnt = float(np.log1p(self.cnt))
 
-        # Affinità di genere firmata: media voti dell'utente sui generi del film
         if query_gids:
             g_rsum = 0.0
             g_cnt = 0
@@ -194,29 +143,10 @@ class MovieSignState:
         return mean_r, std_r, frac_pos, frac_neg, log_cnt
 
 
-def load_dataset(parquet_path: Path, csv_path: Path) -> pd.DataFrame:
-    """Carica velocemente da Parquet se presente, altrimenti da CSV."""
-    df = pd.read_parquet(parquet_path) if parquet_path.exists() else pd.read_csv(csv_path)
-    if "timestamp" in df.columns and not pd.api.types.is_datetime64_any_dtype(df["timestamp"]):
-        df["timestamp"] = pd.to_datetime(df["timestamp"])
-    return df
-
-
-def load_sign_data(parquet_path: Path, csv_path: Path) -> tuple[pd.DataFrame, pd.Series]:
-    """Carica il dataset preparato da Step 6.1 ed estrae matrice X e target binario del segno."""
-    df = load_dataset(parquet_path, csv_path)
-    for col in SIGN_FEATURE_COLS:
-        if col not in df.columns:
-            df[col] = 0.0
-    X = df[SIGN_FEATURE_COLS].fillna(0.0).copy()
-    y = df[TARGET_COL].astype(int)
-    return X, y
-
-
-def train_signed_svd_embeddings(train_df: pd.DataFrame, n_components: int = 16):
+def train_signed_svd_embeddings(train_df: pd.DataFrame, n_components: int = 16) -> tuple[dict, dict]:
     """
     Allena TruncatedSVD sui voti centrati (r - mu) per ottenere fattori latenti firmati.
-    A differenza dell'SVD su soli 1 (link formation), i fattori riflettono concordanza/discordanza di gradimento.
+    I fattori riflettono concordanza/discordanza di gradimento.
     """
     t0 = time.time()
     print(f"  Calcolo embeddings collaborativi Signed SVD ({n_components} componenti su train)...")
@@ -226,14 +156,13 @@ def train_signed_svd_embeddings(train_df: pd.DataFrame, n_components: int = 16):
     u_map = {uid: i for i, uid in enumerate(unique_users)}
     m_map = {mid: i for i, mid in enumerate(unique_movies)}
 
-    row_indices = train_df["user_id"].map(u_map).values
-    col_indices = train_df["movie_id"].map(m_map).values
+    row_indices = train_df["user_id"].map(u_map).to_numpy()
+    col_indices = train_df["movie_id"].map(m_map).to_numpy()
 
-    # Voti centrati rispetto alla media neutra (3.5):
-    # rating 5.0 -> +1.5 | rating 4.0 -> +0.5 | rating 2.0 -> -1.5 | rating 1.0 -> -2.5
-    raw_ratings = train_df["rating"].to_numpy(dtype=np.float32) if "rating" in train_df.columns else np.where(
-        train_df["binary_label"] == 1, 1.0, -1.0
-    ).astype(np.float32)
+    if "rating" in train_df.columns:
+        raw_ratings = train_df["rating"].to_numpy(dtype=np.float32)
+    else:
+        raw_ratings = np.where(train_df["binary_label"] == 1, 4.5, 1.5).astype(np.float32)
     centered_ratings = raw_ratings - float(GLOBAL_MEAN_RATING)
 
     adj = csr_matrix((centered_ratings, (row_indices, col_indices)), shape=(len(unique_users), len(unique_movies)))
@@ -279,18 +208,17 @@ def extract_sign_features(queries: pd.DataFrame, events: pd.DataFrame) -> pd.Dat
     garantendo l'assoluta assenza di data leakage temporale (t_evento < t_query).
     """
     n_queries = len(queries)
-    feature_names = [f for f in SIGN_FEATURE_COLS if f != "signed_svd_similarity"]
-    n_features = len(feature_names)
+    base_cols = [c for c in ["user_id", "movie_id", "rating", "label", "timestamp", "title", "genres", "binary_label"] if c in queries.columns]
 
     if n_queries == 0:
-        empty_df = pd.DataFrame(columns=feature_names, dtype=np.float32)
-        return pd.concat([queries.drop(columns=feature_names, errors="ignore"), empty_df], axis=1)
+        empty_df = pd.DataFrame(columns=SIGN_FEATURE_NAMES_ONLINE, dtype=np.float32)
+        return pd.concat([queries[base_cols].copy(), empty_df], axis=1)
 
-    # Costruzione mappa statica film -> generi (ID compatti) in O(num_movies)
+    # Costruzione mappa film -> generi (ID compatti)
     movie_genres_map = {}
     for source in (events, queries):
         if "movie_id" in source.columns and "genres" in source.columns:
-            m_sub = source[["movie_id", "genres"]].drop_duplicates("movie_id")
+            m_sub = source[["movie_id", "genres"]].dropna().drop_duplicates("movie_id")
             for mid, g in zip(m_sub["movie_id"].to_numpy(), m_sub["genres"].to_numpy()):
                 if mid not in movie_genres_map:
                     movie_genres_map[int(mid)] = parse_genres_to_ids(g)
@@ -306,7 +234,6 @@ def extract_sign_features(queries: pd.DataFrame, events: pd.DataFrame) -> pd.Dat
     q_users = queries["user_id"].to_numpy()
     q_movies = queries["movie_id"].to_numpy()
     q_ts = pd.to_datetime(queries["timestamp"]).astype("int64").to_numpy() / 1e9
-
     order = np.argsort(q_ts, kind="stable")
 
     users: dict[int, UserSignState] = {}
@@ -314,7 +241,7 @@ def extract_sign_features(queries: pd.DataFrame, events: pd.DataFrame) -> pd.Dat
     n_events, ev_idx = len(events_sorted), 0
 
     # Matrice pre-allocata per le 14 feature
-    feat_mat = np.zeros((n_queries, n_features), dtype=np.float32)
+    feat_mat = np.zeros((n_queries, len(SIGN_FEATURE_NAMES_ONLINE)), dtype=np.float32)
     mu = float(GLOBAL_MEAN_RATING)
 
     log_step = max(500_000, n_queries // 10)
@@ -383,11 +310,11 @@ def extract_sign_features(queries: pd.DataFrame, events: pd.DataFrame) -> pd.Dat
         if n_queries >= 200_000 and step % log_step == 0:
             print(f"      ... estratte {step:,}/{n_queries:,} feature ({step * 100 // n_queries}%)")
 
-    feature_df = pd.DataFrame(feat_mat, index=queries.index, columns=feature_names)
-    return pd.concat([queries.drop(columns=feature_names, errors="ignore"), feature_df], axis=1)
+    feature_df = pd.DataFrame(feat_mat, index=queries.index, columns=SIGN_FEATURE_NAMES_ONLINE)
+    return pd.concat([queries[base_cols].copy(), feature_df], axis=1)
 
 
-def build_sign_split_datasets(
+def build_sign_dataset(
     name: str,
     split_df: pd.DataFrame,
     events_df: pd.DataFrame,
@@ -406,76 +333,12 @@ def build_sign_split_datasets(
     return sign_df
 
 
-def save_all_sign_datasets(sign_splits: dict) -> None:
-    """Salva i dataset dedicati a Sign Prediction su disco sia in Parquet che in CSV."""
-    DATA_PROCESSED.mkdir(parents=True, exist_ok=True)
-    CSV_PROCESSED.mkdir(parents=True, exist_ok=True)
-
-    file_maps = [
-        ("Sign Stage Dedicato", sign_splits, {
-            "train": (TRAIN_SIGN_FILE, TRAIN_SIGN_CSV),
-            "val":   (VAL_SIGN_FILE, VAL_SIGN_CSV),
-            "test":  (TEST_SIGN_FILE, TEST_SIGN_CSV),
-        }),
-        ("Sign Stage Compatibilità", sign_splits, {
-            "train": (TRAIN_FILE, TRAIN_CSV),
-            "val":   (VAL_FILE, VAL_CSV),
-            "test":  (TEST_FILE, TEST_CSV),
-        }),
-    ]
-
-    for stage_name, splits_dict, paths_map in file_maps:
-        for name, df in splits_dict.items():
-            t0 = time.time()
-            pq, csv = paths_map[name]
-            df.to_parquet(pq, index=False)
-            df.to_csv(csv, index=False)
-            print(f"  [{stage_name}] {name:>5s} salvato ({len(df):,} righe) in {time.time() - t0:.1f}s: {pq.name} / {csv.name}")
-
-
-def run(
-    train_path: Path = TRAIN_CSV,
-    val_path: Path = VAL_CSV,
-    test_path: Path = TEST_CSV,
-    events_path: Path = EVENTS_CSV,
-):
-    """Esegue la pipeline completa di Step 6.1: creazione dataset per Sign Prediction."""
-    t_total = time.time()
-    print("=" * 60)
-    print("STEP 6.1 – Creazione Dataset Specifico per Sign Prediction")
-    print("=" * 60)
-    print(f"  Feature specifiche per il segno ({len(SIGN_FEATURE_COLS)}):")
-    for f in SIGN_FEATURE_COLS:
-        print(f"    - {f}")
-
-    print("\n1. Caricamento split di base ed eventi...")
-    splits = {
-        "train": load_dataset(TRAIN_FILE, train_path),
-        "val":   load_dataset(VAL_FILE, val_path),
-        "test":  load_dataset(TEST_FILE, test_path),
-    }
-    events_df = load_dataset(EVENTS_TABLE_FILE, events_path)
-
-    print("\n2. Calcolo fattori latenti Signed SVD su train...")
-    user_vecs, movie_vecs = train_signed_svd_embeddings(splits["train"])
-
-    print("\n3. Estrazione causale feature di segno su train, val e test...")
-    sign_datasets = {}
-    for name in ["train", "val", "test"]:
-        sign_datasets[name] = build_sign_split_datasets(
-            name=name,
-            split_df=splits[name],
-            events_df=events_df,
-            user_vecs=user_vecs,
-            movie_vecs=movie_vecs,
-        )
-
-    print("\n4. Salvataggio su disco (Parquet e CSV)...")
-    save_all_sign_datasets(sign_datasets)
-
-    print(f"\nStep 6.1 completato con successo in {time.time() - t_total:.1f}s!\n")
-    return sign_datasets
-
-
-if __name__ == "__main__":
-    sign_datasets = run()
+def load_sign_data(csv_path: Path) -> tuple[pd.DataFrame, pd.Series]:
+    """Carica il dataset preparato da Step 6.1 ed estrae matrice X e target binario binary_label."""
+    df = load_dataset(csv_path)
+    for col in SIGN_FEATURE_COLS:
+        if col not in df.columns:
+            df[col] = 0.0
+    X = df[SIGN_FEATURE_COLS].fillna(0.0).copy()
+    y = df[TARGET_COL].astype(int)
+    return X, y

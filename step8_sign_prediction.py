@@ -7,12 +7,12 @@ Obiettivo:
     1 = Valutazione Positiva (4 o 5 stelle)
     0 = Valutazione Negativa (0.5 - 2.5 stelle)
 
-Feature impiegate:
-  - Storico sentiment utente:   user_mean_rating, user_frac_pos, user_frac_neg
-  - Storico sentiment film:     movie_mean_rating, movie_frac_pos, movie_frac_neg
-  - Attività e recency:         user_n_reviews, movie_n_reviews,
-                                user_days_since_last, movie_days_since_last
-  - Affinità e coppie:          genre_match_score, svd_similarity, already_connected
+Feature impiegate (15 feature da step6_1_sign_features.py):
+  - Storico e attitudine utente: user_mean_rating, user_rating_std, user_frac_pos, user_frac_neg, user_review_count
+  - Storico e consenso film:     movie_mean_rating, movie_rating_std, movie_frac_pos, movie_frac_neg, movie_review_count
+  - Baseline e ottimismo:        rating_baseline_score, user_movie_rating_diff, user_movie_optimism
+  - Affinità di genere firmata:  user_genre_mean_rating
+  - Filtro collaborativo latente:signed_svd_similarity
 """
 from pathlib import Path
 import joblib
@@ -36,35 +36,26 @@ from config import (
     TRAIN_CSV,
     VAL_CSV,
     TEST_CSV,
-    TRAIN_FILE,
-    VAL_FILE,
-    TEST_FILE,
     TRAIN_SIGN_CSV,
     VAL_SIGN_CSV,
     TEST_SIGN_CSV,
-    TRAIN_SIGN_FILE,
-    VAL_SIGN_FILE,
-    TEST_SIGN_FILE,
     SIGN_MODEL_FILE,
 )
-from step6_1 import (
+from features.sign_features import (
     SIGN_FEATURE_COLS,
     TARGET_COL,
     load_sign_data,
-    load_dataset,
 )
 
 SIGN_THRESHOLD = 0.4
 
 
-def load_and_prepare_sign_dataset(parquet_path: Path = None, csv_path: Path = None):
-    """Carica lo split ed estrae la matrice X e il target binario del segno tramite step6_1."""
-    if parquet_path is not None and parquet_path.exists():
-        return load_sign_data(parquet_path, csv_path)
-    if csv_path is not None and csv_path.exists():
-        return load_sign_data(parquet_path, csv_path)
-    # Fallback su train.parquet / train.csv se i file dedicati non sono ancora generati
-    return load_sign_data(TRAIN_FILE, TRAIN_CSV)
+def load_and_prepare_sign_dataset(csv_path: Path = TRAIN_SIGN_CSV):
+    """Carica lo split ed estrae la matrice X e il target binario del segno."""
+    path = Path(csv_path) if csv_path is not None else TRAIN_SIGN_CSV
+    if not path.exists():
+        path = TRAIN_CSV
+    return load_sign_data(path)
 
 
 def evaluate(model, X, y, split_name: str, scaler=None, threshold: float = SIGN_THRESHOLD) -> dict:
@@ -100,15 +91,13 @@ def evaluate(model, X, y, split_name: str, scaler=None, threshold: float = SIGN_
 
 
 def run(
-    train_file: Path = TRAIN_SIGN_FILE,
     train_csv: Path = TRAIN_SIGN_CSV,
-    val_file: Path = VAL_SIGN_FILE,
     val_csv: Path = VAL_SIGN_CSV,
-    test_file: Path = TEST_SIGN_FILE,
     test_csv: Path = TEST_SIGN_CSV,
     save_model: bool = True,
     model_type: str = "gbm",
     threshold: float = SIGN_THRESHOLD,
+    **kwargs,
 ):
     """Addestramento e test del modello di Sign Prediction (Stadio 2)."""
     print("=" * 60)
@@ -119,16 +108,13 @@ def run(
         print(f"    - {f}")
 
     print("\n  Caricamento split...")
-    t_f = train_file if train_file.exists() else TRAIN_FILE
-    t_c = train_csv if train_csv.exists() else TRAIN_CSV
-    v_f = val_file if val_file.exists() else VAL_FILE
-    v_c = val_csv if val_csv.exists() else VAL_CSV
-    te_f = test_file if test_file.exists() else TEST_FILE
-    te_c = test_csv if test_csv.exists() else TEST_CSV
+    t_c = train_csv if Path(train_csv).exists() else TRAIN_CSV
+    v_c = val_csv if Path(val_csv).exists() else VAL_CSV
+    te_c = test_csv if Path(test_csv).exists() else TEST_CSV
 
-    X_train, y_train = load_and_prepare_sign_dataset(t_f, t_c)
-    X_val, y_val = load_and_prepare_sign_dataset(v_f, v_c)
-    X_test, y_test = load_and_prepare_sign_dataset(te_f, te_c)
+    X_train, y_train = load_and_prepare_sign_dataset(t_c)
+    X_val, y_val = load_and_prepare_sign_dataset(v_c)
+    X_test, y_test = load_and_prepare_sign_dataset(te_c)
 
     print(f"  Train: {len(X_train):,} righe | Val: {len(X_val):,} | Test: {len(X_test):,}")
 

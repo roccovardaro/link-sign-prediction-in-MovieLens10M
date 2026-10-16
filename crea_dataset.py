@@ -18,7 +18,7 @@ from step2_pulizia import run as step2
 from step3_grafo import run as step3
 from step5_split import run as step5
 from step6_features import run as step6
-from step6_1 import run as step6_1
+from step6_1_sign_features import run as step6_1
 
 
 def main():
@@ -61,16 +61,16 @@ def main():
     print("=" * 60)
     print(f"PIPELINE DATASET COMPLETATA CON SUCCESSO in {elapsed:.1f}s")
     print("=" * 60)
-    print("\nFile generati in data/processed/csv/ e data/processed/:")
+    print("\nFile generati in data/processed/csv/:")
     print("  1. raw_ratings.csv   (da Step 1)")
     print("  2. clean_ratings.csv (da Step 2)")
-    print("  3. events.csv / events.parquet (da Step 3)")
-    print("  4. train_link.csv / train_link.parquet (da Step 6 per Link Prediction)")
-    print("  5. val_link.csv / val_link.parquet     (da Step 6 per Link Prediction)")
-    print("  6. test_link.csv / test_link.parquet   (da Step 6 per Link Prediction)")
-    print("  7. train_sign.csv / train_sign.parquet (da Step 6.1 per Sign Prediction)")
-    print("  8. val_sign.csv / val_sign.parquet     (da Step 6.1 per Sign Prediction)")
-    print("  9. test_sign.csv / test_sign.parquet   (da Step 6.1 per Sign Prediction)")
+    print("  3. events.csv        (da Step 3)")
+    print("  4. train_link.csv    (da Step 6 per Link Prediction)")
+    print("  5. val_link.csv      (da Step 6 per Link Prediction)")
+    print("  6. test_link.csv     (da Step 6 per Link Prediction)")
+    print("  7. train_sign.csv    (da Step 6.1 per Sign Prediction)")
+    print("  8. val_sign.csv      (da Step 6.1 per Sign Prediction)")
+    print("  9. test_sign.csv     (da Step 6.1 per Sign Prediction)")
     print("\nPer addestrare e valutare i modelli:")
     print("  - Stadio 1 (Link Prediction):  python step7_link_prediction.py")
     print("  - Stadio 2 (Sign Prediction):  python step8_sign_prediction.py")

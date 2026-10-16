@@ -16,9 +16,6 @@ import pandas as pd
 from config import (
     SPLIT_RATIOS,
     SPLIT_INFO_FILE,
-    TRAIN_FILE,
-    VAL_FILE,
-    TEST_FILE,
     TRAIN_CSV,
     VAL_CSV,
     TEST_CSV,
@@ -81,20 +78,18 @@ def verify_no_leakage(splits: dict) -> None:
 
 
 def save_splits(splits: dict, split_info: dict) -> None:
-    """Salva i tre set su disco sia in CSV che in Parquet."""
-    DATA_PROCESSED.mkdir(parents=True, exist_ok=True)
+    """Salva i tre set su disco in CSV."""
     CSV_PROCESSED.mkdir(parents=True, exist_ok=True)
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
     file_map = {
-        "train": (TRAIN_FILE, TRAIN_CSV),
-        "val":   (VAL_FILE, VAL_CSV),
-        "test":  (TEST_FILE, TEST_CSV),
+        "train": TRAIN_CSV,
+        "val":   VAL_CSV,
+        "test":  TEST_CSV,
     }
 
     for name, split_df in splits.items():
-        pq_path, csv_path = file_map[name]
-        split_df.to_parquet(pq_path, index=False)
+        csv_path = file_map[name]
         split_df.to_csv(csv_path, index=False)
         print(f"  {name:>5s} salvato: {csv_path}  ({len(split_df):,} righe)")
 
