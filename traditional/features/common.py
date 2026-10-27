@@ -1,5 +1,5 @@
 """
-features/common.py – Utilità comuni per l'ingegneria delle feature (MovieLens 10M).
+traditional/features/common.py – Utilità comuni per l'ingegneria delle feature (MovieLens 10M).
 Contiene costanti condivise, caricamento/salvataggio dati e parsing dei generi.
 """
 

@@ -31,10 +31,10 @@ def parse_args():
     parser.add_argument(
         "--sample-size",
         type=int,
-        default=500_000,
+        default=1_000_000,
         help="Numero di righe di train da campionare per calcoli rapidi (0 per usare l'intero dataset)",
     )
-    parser.add_argument("--epochs", type=int, default=10, help="Numero di epoche di addestramento")
+    parser.add_argument("--epochs", type=int, default=15, help="Numero di epoche di addestramento")
     parser.add_argument("--dim", type=int, default=64, help="Dimensione degli embedding dei nodi")
     parser.add_argument("--hidden-dim", type=int, default=64, help="Dimensione nascosta dei layer GNN e MLP")
     parser.add_argument("--num-layers", type=int, default=2, help="Numero di layer di convoluzione GNN")

@@ -1,5 +1,5 @@
 """
-features/link_features.py – Estrazione Caratteristiche per la Link Prediction (Stadio 1).
+traditional/features/link_features.py – Estrazione Caratteristiche per la Link Prediction (Stadio 1).
 
 Modella la formazione del legame (arco nel grafo bipartito) attraverso:
   1. Topologia & Popolarità (user_degree, movie_degree)
@@ -14,7 +14,7 @@ import time
 import numpy as np
 import pandas as pd
 
-from features.common import (
+from traditional.features.common import (
     SECONDS_PER_DAY,
     WINDOW_30D_SEC,
     parse_genres_tuple,
@@ -252,7 +252,7 @@ def build_link_dataset(
 
 
 def load_link_data(csv_path: Path) -> tuple[pd.DataFrame, pd.Series]:
-    """Carica il dataset preparato da Step 6 ed estrae matrice X e target binario link_exists."""
+    """Carica il dataset preparato ed estrae matrice X e target binario link_exists."""
     df = load_dataset(csv_path)
     X = df[LINK_FEATURE_COLS].fillna(0).copy()
     y = df[TARGET_COL].astype(int)

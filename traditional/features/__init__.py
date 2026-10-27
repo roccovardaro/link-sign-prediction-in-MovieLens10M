@@ -1,12 +1,13 @@
 """
-features – Modulo centralizzato per l'estrazione e gestione delle feature (MovieLens 10M).
+traditional/features – Modulo per l'ingegneria e gestione delle feature (MovieLens 10M).
+
 Include:
-  - common: utilità di I/O, parsing dei generi e costanti condivise
-  - link_features: topologia, recency e attività a 30gg per Link Prediction (7 feature)
-  - sign_features: attitudine, consenso film, baseline Koren e Signed SVD per Sign Prediction (15 feature)
+  - common: utilità condivise, mapping generi, costanti e funzioni di I/O
+  - link_features: feature topologiche, recency e attività a 30gg per Link Prediction (7 feature)
+  - sign_features: feature di attitudine, consenso, baseline Koren e Signed SVD per Sign Prediction (15 feature)
 """
 
-from features.common import (
+from traditional.features.common import (
     GLOBAL_MEAN_RATING,
     SECONDS_PER_DAY,
     WINDOW_30D_SEC,
@@ -18,7 +19,7 @@ from features.common import (
     compute_genre_match,
 )
 
-from features.link_features import (
+from traditional.features.link_features import (
     LINK_FEATURE_COLS,
     TARGET_COL as LINK_TARGET_COL,
     LinkNodeState,
@@ -28,7 +29,7 @@ from features.link_features import (
     load_link_data,
 )
 
-from features.sign_features import (
+from traditional.features.sign_features import (
     SIGN_FEATURE_COLS,
     TARGET_COL as SIGN_TARGET_COL,
     UserSignState,

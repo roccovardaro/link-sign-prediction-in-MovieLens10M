@@ -1,5 +1,5 @@
 """
-features/sign_features.py – Estrazione Caratteristiche per la Sign Prediction (Stadio 2).
+traditional/features/sign_features.py – Estrazione Caratteristiche per la Sign Prediction (Stadio 2).
 
 Modella la polarità dell'interazione (gradimento vs scontento) condizionata all'esistenza del link:
   1 = Valutazione Positiva (rating 4.0 - 5.0)
@@ -25,7 +25,7 @@ import pandas as pd
 from scipy.sparse import csr_matrix
 from sklearn.decomposition import TruncatedSVD
 
-from features.common import (
+from traditional.features.common import (
     GLOBAL_MEAN_RATING,
     N_GENRES,
     parse_genres_to_ids,
@@ -334,7 +334,7 @@ def build_sign_dataset(
 
 
 def load_sign_data(csv_path: Path) -> tuple[pd.DataFrame, pd.Series]:
-    """Carica il dataset preparato da Step 6.1 ed estrae matrice X e target binario binary_label."""
+    """Carica il dataset preparato ed estrae matrice X e target binario binary_label."""
     df = load_dataset(csv_path)
     for col in SIGN_FEATURE_COLS:
         if col not in df.columns:
