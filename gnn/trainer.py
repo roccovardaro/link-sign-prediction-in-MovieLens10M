@@ -23,6 +23,8 @@ from sklearn.metrics import (
     precision_score,
     recall_score,
     f1_score,
+    classification_report,
+    confusion_matrix,
 )
 
 from gnn.dataset import BipartiteGraphBundle, GraphSplitData
@@ -235,6 +237,97 @@ class GNNTrainer:
 
         return metrics
 
+    @torch.no_grad()
+    def evaluate_cascade(
+        self,
+        split_data: GraphSplitData,
+        link_threshold: float = 0.5,
+        sign_threshold: float = 0.5,
+        verbose: bool = True,
+    ) -> Dict[str, Any]:
+        """
+        Valuta il modello in modalità a cascata end-to-end (3 classi):
+          0 = Nessun Link
+          1 = Link Negativo
+          2 = Link Positivo
+        Rende le metriche direttamente confrontabili con run_traditional.py.
+        """
+        self.model.eval()
+        z_u, z_m = self.model.encode(
+            edge_dict=self.edge_dict,
+            edge_index_u2m=self.edge_index_u2m,
+            edge_index_m2u=self.edge_index_m2u,
+        )
+
+        pairs = split_data.pairs.to(self.device)
+        link_targets = split_data.link_labels.cpu().numpy()
+        sign_targets = split_data.sign_labels.cpu().numpy()
+
+        link_probs = self.model.predict_link_proba(z_u, z_m, pairs).cpu().numpy()
+        sign_probs = self.model.predict_sign_proba(z_u, z_m, pairs).cpu().numpy()
+
+        # Ground truth a 3 classi:
+        # 0 = Nessun link reale
+        # 1 = Link reale negativo (sign == 0)
+        # 2 = Link reale positivo (sign == 1)
+        y_true = np.zeros(len(link_targets), dtype=int)
+        y_true[(link_targets == 1) & (sign_targets == 0)] = 1
+        y_true[(link_targets == 1) & (sign_targets == 1)] = 2
+
+        # Predizione a cascata a 3 classi
+        pred_link = link_probs >= link_threshold
+        pred_sign = sign_probs >= sign_threshold
+
+        y_pred = np.zeros(len(link_targets), dtype=int)
+        y_pred[pred_link & (~pred_sign)] = 1
+        y_pred[pred_link & pred_sign] = 2
+
+        target_names = ["Nessun Link (0)", "Link Negativo (1)", "Link Positivo (2)"]
+        report_dict = classification_report(
+            y_true, y_pred, target_names=target_names, digits=4, zero_division=0, output_dict=True
+        )
+        cm = confusion_matrix(y_true, y_pred, labels=[0, 1, 2]).tolist()
+        acc = float(accuracy_score(y_true, y_pred))
+        balanced_acc = float(balanced_accuracy_score(y_true, y_pred))
+
+        link_cm = confusion_matrix(link_targets, (link_probs >= link_threshold).astype(int))
+        link_accuracy = float(accuracy_score(link_targets, (link_probs >= link_threshold).astype(int)))
+        link_recall = float(link_cm[1][1] / max(link_cm[1][0] + link_cm[1][1], 1))
+
+        if verbose:
+            n_real_links = int((link_targets == 1).sum())
+            print(f"\n  ── Risultati GNN Stadio 1 (Link Prediction | Soglia = {link_threshold:.2f}) ──")
+            print(f"  Accuracy Link       : {link_accuracy:.4f}")
+            print(f"  Recall Link Reali   : {link_recall:.4f} ({link_cm[1][1]:,} intercettati su {n_real_links:,})")
+            print(f"  Falsi Allarmi (FP)  : {link_cm[0][1]:,} coppie senza link scambiate per link")
+
+            mask_pred_link = pred_link == 1
+            n_pred = int(mask_pred_link.sum())
+            n_pos_pred = int((pred_link & pred_sign).sum())
+            n_neg_pred = int((pred_link & (~pred_sign)).sum())
+            print(f"\n  ── Risultati GNN Stadio 2 (Sign Prediction su {n_pred:,} link previsti | Soglia = {sign_threshold:.2f}) ──")
+            print(f"    --> Previsti come Positivi: {n_pos_pred:,} ({n_pos_pred * 100 / max(n_pred, 1):.2f}%)")
+            print(f"    --> Previsti come Negativi: {n_neg_pred:,} ({n_neg_pred * 100 / max(n_pred, 1):.2f}%)")
+
+            print("\n  ── Report Finale a Cascata GNN (3 Classi) ──")
+            print(classification_report(y_true, y_pred, target_names=target_names, digits=4, zero_division=0))
+
+            print("  Matrice di Confusione Globale (Righe=Reale, Colonne=Predetto):")
+            header = f"  {'':<20} | {'Pred: No Link':<14} | {'Pred: Negativo':<15} | {'Pred: Positivo':<15}"
+            print(header)
+            print("  " + "-" * (len(header) - 2))
+            for i, name in enumerate(target_names):
+                print(f"  {name:<20} | {cm[i][0]:<14,d} | {cm[i][1]:<15,d} | {cm[i][2]:<15,d}")
+
+        return {
+            "accuracy": acc,
+            "balanced_accuracy": balanced_acc,
+            "link_accuracy": link_accuracy,
+            "link_recall": link_recall,
+            "classification_report": report_dict,
+            "confusion_matrix": cm,
+        }
+
     def train(
         self,
         epochs: int = 15,
@@ -286,6 +379,7 @@ class GNNTrainer:
                     save_path,
                     optimal_link_threshold=optimal_link_th,
                     optimal_sign_threshold=optimal_sign_th,
+                    val_metrics=best_metrics,
                 )
 
         print(f"[GNNTrainer] Addestramento completato in {time.time() - t0:.1f}s!")
@@ -316,6 +410,7 @@ class GNNTrainer:
         path: Path,
         optimal_link_threshold: float = 0.5,
         optimal_sign_threshold: float = 0.5,
+        val_metrics: Optional[Dict[str, float]] = None,
     ):
         """Salva lo stato completo del modello e i metadati dei nodi."""
         path = Path(path)
@@ -334,6 +429,7 @@ class GNNTrainer:
             "neg_class_weight": self.neg_class_weight,
             "optimal_link_threshold": optimal_link_threshold,
             "optimal_sign_threshold": optimal_sign_threshold,
+            "val_metrics": val_metrics,
         }, path)
 
     def load_checkpoint(self, path: Path):

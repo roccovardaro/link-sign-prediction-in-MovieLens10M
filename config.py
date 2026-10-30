@@ -24,7 +24,7 @@ RESULTS_DIR    = ROOT_DIR / "results"
 # MovieLens 10M contiene oltre 10 milioni di valutazioni.
 # Impostare un intero (es. 100_000) per campionare le righe più recenti o casuali
 # in modo da garantire tempi di calcolo rapidi e reattivi, oppure None per l'intero dataset.
-SAMPLE_SIZE = 10_000_000
+SAMPLE_SIZE = None
 
 # ── Colonne dataset ─────────────────────────────────────────────────────
 # Nomi colonne standardizzati per MovieLens
