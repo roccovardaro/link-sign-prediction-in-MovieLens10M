@@ -207,3 +207,5 @@ Tutti i percorsi e le impostazioni del dataset sono gestiti centralmente in [con
 - `DATA_PROCESSED`: cartella contenente i file CSV elaborati e i checkpoint addestrati.
 - `RESULTS_DIR`: cartella di destinazione dei report JSON (`results/*.json`).
 
+## Credits
+Questo progetto è stato sviluppato come elaborato assegnato per il corso "Analisi di Social Network & Media", semestre privavera 2026 (Instructor: prof. [Andrea Tagarelli](https://mlnteam-unical.github.io/)) presso il Dipartimento DIMES dell'Università della Calabria, Italia.
